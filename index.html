@@ -834,7 +834,7 @@ class TolgeeAPI{
     }
     return all;
   }
-  async createKey({keyName, translations={}, tags=[]}) {
+  async createKey({keyName, translations={}, tags=[], description=''}) {
     // POST /v2/projects/:id/keys 에 translations 포함해서 한 번에 생성
     // Tolgee v2: translations 형식 { "ko": "텍스트값" }
     const transBody = {};
@@ -847,6 +847,7 @@ class TolgeeAPI{
       translations: transBody,
       tags: tags,
     };
+    if (description) body.description = description;
     const r = await this._fetch(
       `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
       { method: 'POST', body: JSON.stringify(body) }
@@ -874,12 +875,23 @@ class TolgeeAPI{
     return p.json();
   }
   async registerKey({keyName,val,figmaTags=[],existingKeyId=null}){
-    const tags=['lint:passed',...figmaTags.map(function(t){return 'figma:'+t;})];
-    if(existingKeyId){await this.addTags(existingKeyId,tags);return{type:'tag-added',keyName};}
+    // figmaTags → description에 추가 (태그 대신)
+    var description = figmaTags.length ? 'Figma: ' + figmaTags.join(', ') : '';
+
+    if(existingKeyId){
+      // 기존 키: description 업데이트
+      if(description){
+        await this._fetch(
+          this.baseUrl+'/v2/projects/'+this.projectId+'/keys/'+existingKeyId,
+          {method:'PATCH', body:JSON.stringify({description:description})}
+        );
+      }
+      return{type:'tag-added',keyName};
+    }
     const langs=tolgeeConfig.langs&&tolgeeConfig.langs.length?tolgeeConfig.langs:['ko-KR'];
     const translations={};
     langs.forEach(function(l,i){translations[l]=i===0?val:'';});
-    const r=await this.createKey({keyName,translations,tags});
+    const r=await this.createKey({keyName,translations,tags:[],description:description});
     return{type:'created',keyName,keyId:r.id};
   }
 
