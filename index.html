@@ -941,12 +941,9 @@ class TolgeeAPI{
     if (!p.ok) throw new Error('태그 업데이트 실패: ' + p.status);
     return p.json();
   }
-  async registerKey({keyName,val,figmaTags=[],existingKeyId=null}){
-    // figmaTags → description에 추가 (태그 대신)
+  async registerKey({keyName,val,translations=null,figmaTags=[],existingKeyId=null}){
     var description = figmaTags.length ? 'Figma: ' + figmaTags.join(', ') : '';
-
     if(existingKeyId){
-      // 기존 키: description 업데이트
       if(description){
         await this._fetch(
           this.baseUrl+'/v2/projects/'+this.projectId+'/keys/'+existingKeyId,
@@ -955,9 +952,12 @@ class TolgeeAPI{
       }
       return{type:'tag-added',keyName};
     }
-    const langs=(tolgeeConfig.langs&&tolgeeConfig.langs.length)?tolgeeConfig.langs:['ko-KR'];
-    const translations={};
-    langs.forEach(function(l,i){translations[l]=i===0?val:'';});
+    // translations가 외부에서 제공되지 않으면 기본 언어만 등록
+    if(!translations){
+      translations={};
+      var langs=tolgeeConfig.langs&&tolgeeConfig.langs.length?tolgeeConfig.langs:['ko-KR'];
+      langs.forEach(function(l,i){translations[l]=i===0?val:'';});
+    }
     const r=await this.createKey({keyName,translations,tags:[],description:description});
     return{type:'created',keyName,keyId:r.id};
   }
@@ -978,6 +978,54 @@ async function getCached(){
 // ── 유사도 ────────────────────────────────────────────────────────────────────
 function lev(a,b){const m=a.length,n=b.length,dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);return dp[m][n];}
 function sim(a,b){if(a===b)return 100;const mx=Math.max(a.length,b.length);return mx===0?100:Math.round((1-lev(a,b)/mx)*100);}
+// ── Claude API로 다국어 자동 번역 ───────────────────────────────────────────────
+async function translateWithClaude(text, sourceLang, targetLangs) {
+  var apiKey = '';
+  try { apiKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
+  if (!apiKey || !targetLangs.length) return {};
+
+  var langNames = {
+    'ko-KR':'한국어','ko':'한국어','en-US':'영어','en':'영어',
+    'ja-JP':'일본어','ja':'일본어','zh-CN':'중국어(간체)','zh-TW':'중국어(번체)',
+  };
+  var targetList = targetLangs.map(function(l) {
+    return (langNames[l]||l) + ' (' + l + ')';
+  }).join(', ');
+
+  var prompt = [
+    'Translate the following text from ' + (langNames[sourceLang]||sourceLang) + ' into: ' + targetList,
+    'Return ONLY a JSON object. Keys are language codes, values are translations. No explanation.',
+    'Text: "' + text + '"',
+    'Example: {"en-US": "Hello", "ja-JP": "こんにちは"}',
+  ].join(' ');
+
+  try {
+    var res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error('Claude API ' + res.status);
+    var data = await res.json();
+    var t = (data.content&&data.content[0]&&data.content[0].text)||'';
+    var m = t.match(/\{[\s\S]*?\}/);
+    if (!m) throw new Error('parse error');
+    return JSON.parse(m[0]);
+  } catch(e) {
+    console.warn('번역 실패:', e.message);
+    return {};
+  }
+}
+
 // ── 키 추천: Claude API (맥락 있을 때) + 규칙 기반 (fallback) ───────────────
 async function recommendKeysWithClaude(screen, val, existingKeys) {
   var apiKey = '';
@@ -1353,7 +1401,26 @@ async function regKey(){
   const a=getApi();
   try{
     if(a){
-      await a.registerKey({keyName:keyToRegister,val:valToRegister,figmaTags:tagsToRegister,existingKeyId:existingId});
+      // Claude API로 다국어 자동 번역
+      var langs = tolgeeConfig.langs && tolgeeConfig.langs.length ? tolgeeConfig.langs : ['ko-KR'];
+      var baseLang = langs[0];
+      var targetLangs = langs.slice(1);
+      var translations = {};
+      translations[baseLang] = valToRegister;
+
+      var claudeKey = '';
+      try { claudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
+      if (claudeKey && targetLangs.length > 0) {
+        showToast('번역 중...');
+        var translated = await translateWithClaude(valToRegister, baseLang, targetLangs);
+        targetLangs.forEach(function(l) {
+          translations[l] = translated[l] || '';
+        });
+      } else {
+        targetLangs.forEach(function(l) { translations[l] = ''; });
+      }
+
+      await a.registerKey({keyName:keyToRegister,val:valToRegister,translations:translations,figmaTags:tagsToRegister,existingKeyId:existingId});
       _cache=null;
       showToast('✓ "' + keyToRegister + '" Tolgee에 등록됐어요');
       // 선택된 텍스트 레이어 이름을 키값으로 변경 (체크박스 확인)
