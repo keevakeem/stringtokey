@@ -875,7 +875,7 @@ class TolgeeAPI{
     });
   }
 
-  async fetchAllKeys({pageSize=200}={}){ const lang=(tolgeeConfig.langs&&tolgeeConfig.langs[0])||'ko-KR';
+  async fetchAllKeys({lang=null,pageSize=200}={}){ lang=lang||(tolgeeConfig.langs&&tolgeeConfig.langs[0])||'ko-KR';
     let page=0,all=[],total=1;
     while(page<total){
       const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${page}`,{headers:this.hdr});
