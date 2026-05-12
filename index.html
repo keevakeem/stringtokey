@@ -1448,11 +1448,11 @@ async function previewReplace() {
     targetKeys.forEach(function(item) { if (item.val) keyToTarget[item.key] = item.val; });
 
     bulkTexts.forEach(function(t) {
-      // 레이어 이름이 키값 형식인지 확인 (점으로 구분된 snake_case)
+      // 레이어 이름이 Tolgee 키 목록에 존재하는지 직접 매칭
       const layerName = t.name || '';
-      const isKeyFormat = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(layerName);
-      const toText = isKeyFormat ? keyToTarget[layerName] : null;
+      const toText = layerName ? keyToTarget[layerName] : null;
       const hasMatch = !!toText && toText !== t.characters;
+      const reason = !layerName ? '레이어명 없음' : !toText ? '키 없음' : '번역 없음';
 
       if (hasMatch) {
         replaceMap.push({ nodeId: t.id, fromText: t.characters, newText: toText });
@@ -1467,7 +1467,7 @@ async function previewReplace() {
           '<div style="display:flex;align-items:center;gap:6px">',
             '<span class="rep-from">' + t.characters + '</span>',
             '<span class="rep-arrow">→</span>',
-            '<span class="rep-to">' + (toText || (isKeyFormat ? '번역 없음' : '키 형식 아님')) + '</span>',
+            '<span class="rep-to">' + (toText || reason) + '</span>',
           '</div>',
         '</div>',
         '<span class="rep-badge">' + (hasMatch ? '교체' : '스킵') + '</span>',
