@@ -137,7 +137,7 @@ select{cursor:pointer}
   <!-- 모드 전환 -->
   <div style="display:flex;gap:6px;margin-bottom:12px">
     <button id="mode-single" class="btn-p" style="flex:1;padding:7px;font-size:12px" onclick="setMode('single')">단일 검색</button>
-    <button id="mode-bulk" class="btn-s" style="flex:1;padding:7px;font-size:12px" onclick="setMode('bulk')">프레임 일괄</button>
+    <button id="mode-bulk"   class="btn-s" style="flex:1;padding:7px;font-size:12px" onclick="setMode('bulk')">프레임 일괄 <span id="bulk-badge" style="display:none;background:#fff;color:var(--text);border-radius:20px;padding:1px 6px;font-size:10px;margin-left:4px">0</span></button>
   </div>
 
   <!-- 단일 검색 영역 -->
@@ -570,12 +570,17 @@ function applySelection(msg) {
   // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
   bulkTexts = msg.bulkTexts || [];
   document.getElementById('bulk-count').textContent = bulkTexts.length;
+  var badge = document.getElementById('bulk-badge');
+  if (badge) {
+    badge.textContent = bulkTexts.length;
+    badge.style.display = bulkTexts.length > 0 ? 'inline' : 'none';
+  }
   if (bulkTexts.length > 0 && bulkMode) {
     renderBulkList();
   }
-  // 프레임이 선택됐고 bulk 텍스트가 있으면 일괄 모드 알림
-  if (bulkTexts.length > 0 && !bulkMode) {
-    showToast(bulkTexts.length + '개 문자열 감지 — 프레임 일괄 탭을 확인해보세요');
+  // 프레임 일괄 모드에서 자동 갱신
+  if (bulkTexts.length > 0 && bulkMode) {
+    renderBulkList();
   }
 }
 
