@@ -135,8 +135,8 @@ select{cursor:pointer}
 <div class="plugin-wrap">
 <div class="tabs">
   <button class="tab active" onclick="sw('keys')">🔑 문자열 키</button>
-  <button class="tab" onclick="sw('replace')">🌐 언어 교체</button>
-  <button class="tab" onclick="sw('rename')">✏️ 프레임 이름</button>
+  <button class="tab figma-only" onclick="sw('replace')" style="display:none">🌐 언어 교체</button>
+  <button class="tab figma-only" onclick="sw('rename')" style="display:none">✏️ 프레임 이름</button>
   <button class="tab" onclick="sw('settings')">⚙️ 설정</button>
 </div>
 
@@ -181,8 +181,8 @@ select{cursor:pointer}
     <div class="lbl" style="margin-bottom:7px">선택된 키</div>
     <div class="key-mono" id="c-key"></div>
     <div class="val-t" id="c-val"></div>
-    <div class="ftags" id="c-tags" style="margin-bottom:8px"></div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:8px;cursor:pointer">
+    <div class="ftags figma-only" id="c-tags" style="display:none;margin-bottom:8px"></div>
+    <label class="figma-only" style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:8px;cursor:pointer">
       <input type="checkbox" id="rename-layer-chk" checked style="accent-color:var(--text)">
       등록 후 레이어 이름을 키값으로 변경
     </label>
@@ -743,8 +743,12 @@ async function refreshBulk() {
 }
 
 function sw(t) {
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['keys','replace','rename','settings'][i]===t));
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(function(el) {
+    const tabs = ['keys','replace','rename','settings'];
+    const idx = Array.from(document.querySelectorAll('.tab')).indexOf(el);
+    el.classList.toggle('active', tabs[idx] === t);
+  });
+  document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
   document.getElementById('tab-'+t).classList.add('active');
 }
 
@@ -1198,7 +1202,7 @@ async function renderResults(inputVal,results,thresh){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px;margin-bottom:2px"><div class="key-mono">${item.key}</div><span class="badge ${bCls}">${bLbl}</span></div>
       <div class="val-t">${item.val}</div>
       <div class="sim-row"><div class="sim-bg"><div class="sim-fill ${fCls}" style="width:${item.sim}%"></div></div><span style="font-family:var(--mono);font-size:10px;color:var(--text-3)">${item.usage}개 화면</span></div>
-      <div class="fig-row"><div class="fig-lbl">📱 Figma 화면</div><div class="ftags" id="tags-${cId}">${renderFTags(cardTags[cId],cId,false)}</div></div>
+      ${IS_FIGMA ? '<div class="fig-row"><div class="fig-lbl">📱 Figma 화면</div><div class="ftags" id="tags-' + cId + '">' + renderFTags(cardTags[cId],cId,false) + '</div></div>' : ''}
     </div>`;
   });
   // 신규 카드는 Claude 추천 로딩 중 플레이스홀더로 먼저 렌더
@@ -1226,7 +1230,7 @@ async function renderResults(inputVal,results,thresh){
       '<div style="font-size:10px;color:var(--text-3);margin-bottom:4px">직접 입력</div>',
       '<input class="new-ki" id="nki" value="" placeholder="키를 직접 입력하거나 위에서 선택">',
     '</div>',
-    '<div class="fig-row"><div class="fig-lbl">📱 Figma 화면 연결</div><div class="ftags" id="tags-cn"></div></div>',
+    IS_FIGMA ? '<div class="fig-row"><div class="fig-lbl">📱 Figma 화면 연결</div><div class="ftags" id="tags-cn"></div></div>' : '',
   ].join('');
   area.appendChild(cnWrap);
 
@@ -1544,6 +1548,13 @@ async function initApp() {
     document.getElementById('gh-branch').value = gh.branch || 'main';
   }
   renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+
+  // Figma 전용 요소 표시 여부
+  if (IS_FIGMA) {
+    document.querySelectorAll('.figma-only').forEach(function(el) {
+      el.style.display = el.tagName === 'LABEL' ? 'flex' : 'block';
+    });
+  }
 }
 initApp();
 </script>
