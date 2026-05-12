@@ -492,7 +492,7 @@ let keyRules = {
   }
 };
 let screenList = ['common','onboarding','home','profile','settings','payment','search'];
-let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',langs:['ko-KR','en','ja']};
+let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',langs:[]};
 let selectedFrames = [];
 let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
 let currentTextNodeId = null; // 현재 선택된 텍스트 레이어 ID (레이어 이름 변경용)
@@ -544,7 +544,7 @@ function handleFigmaMsg(msg) {
             if (remote.github.repo)   localStorage.setItem('skt_gh_repo',   remote.github.repo);
             if (remote.github.branch) localStorage.setItem('skt_gh_branch', remote.github.branch);
           }
-          renderScreenSelect(); renderScreenList(); renderFeatMap();
+          renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
         }
         // API Key는 clientStorage에서 (Figma) 또는 localStorage에서 (브라우저)
         const savedKey = msg.tolgeeConfig?.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
@@ -951,7 +951,7 @@ class TolgeeAPI{
       }
       return{type:'tag-added',keyName};
     }
-    const langs=tolgeeConfig.langs&&tolgeeConfig.langs.length?tolgeeConfig.langs:['ko-KR'];
+    const langs=(tolgeeConfig.langs&&tolgeeConfig.langs.length)?tolgeeConfig.langs:['ko-KR'];
     const translations={};
     langs.forEach(function(l,i){translations[l]=i===0?val:'';});
     const r=await this.createKey({keyName,translations,tags:[],description:description});
@@ -1514,6 +1514,7 @@ async function initApp() {
         if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
         if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
         if (remote.tolgee.langs)     tolgeeConfig.langs     = remote.tolgee.langs;
+        renderReplaceLangSelect(); // langs 로드 후 즉시 드롭다운 갱신
       }
       if (remote.github) {
         if (remote.github.owner)  localStorage.setItem('skt_gh_owner',  remote.github.owner);
