@@ -616,6 +616,8 @@ function applySelection(msg) {
     // 맥락 저장 (Claude 추천에 활용)
     layerContext = texts[0].context || null;
     currentTextNodeId = texts[0].id || null;
+    // hint-box에 nodeId 저장 — 검색 후에도 유지
+    document.getElementById('hint-box').dataset.nodeId = texts[0].id || '';
   } else {
     hint.style.display = 'none';
     layerContext = null;
@@ -1319,7 +1321,8 @@ async function regKey(){
   const valToRegister = selVal;
   const tagsToRegister = selTags.slice();
   const existingId = selExistingKeyId;
-  const nodeIdToRename = currentTextNodeId;
+  // hint-box dataset에서도 fallback (검색 후 선택 해제된 경우 대비)
+  const nodeIdToRename = currentTextNodeId || document.getElementById('hint-box').dataset.nodeId || null;
 
   const btn=document.querySelector('#confirm-box .btn-p');
   const orig=btn.textContent;btn.innerHTML='<span class="ld"><span></span><span></span><span></span></span>';btn.disabled=true;
@@ -1333,6 +1336,9 @@ async function regKey(){
       const renameChk = document.getElementById('rename-layer-chk');
       if(IS_FIGMA && nodeIdToRename && renameChk && renameChk.checked) {
         toFigma({ type: 'rename-layer', nodeId: nodeIdToRename, keyName: keyToRegister });
+        showToast('레이어 이름 변경 중... nodeId: ' + nodeIdToRename.substring(0,8));
+      } else if(renameChk && renameChk.checked) {
+        showToast('레이어 이름 변경 실패 — 텍스트 레이어를 먼저 선택해주세요');
       }
       toFigma({type:'notify',message:'키 등록: ' + keyToRegister});
     }else{showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요');}
