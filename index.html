@@ -6,245 +6,131 @@
 <title>String Key Tool</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Pretendard:wght@400;500;600&display=swap');
-
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg: #F7F6F2;
-    --surface: #FFFFFF;
-    --border: #E2E0D8;
-    --border-strong: #C8C5BB;
-    --text: #1A1917;
-    --text-2: #6B6860;
-    --text-3: #A8A59E;
-    --green: #166534; --green-bg: #DCFCE7; --green-border: #86EFAC;
-    --amber: #92400E; --amber-bg: #FEF3C7; --amber-border: #FCD34D;
-    --blue: #1E40AF; --blue-bg: #DBEAFE; --blue-border: #93C5FD;
-    --purple: #5B21B6; --purple-bg: #EDE9FE; --purple-border: #C4B5FD;
-    --mono: 'IBM Plex Mono', monospace;
-    --sans: 'Pretendard', -apple-system, sans-serif;
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#F7F6F2;--surface:#FFF;--border:#E2E0D8;--border-strong:#C8C5BB;
+    --text:#1A1917;--text-2:#6B6860;--text-3:#A8A59E;
+    --green:#166534;--green-bg:#DCFCE7;--green-bd:#86EFAC;
+    --amber:#92400E;--amber-bg:#FEF3C7;--amber-bd:#FCD34D;
+    --blue:#1E40AF;--blue-bg:#DBEAFE;--blue-bd:#93C5FD;
+    --purple:#5B21B6;--purple-bg:#EDE9FE;--purple-bd:#C4B5FD;
+    --mono:'IBM Plex Mono',monospace;--sans:'Pretendard',-apple-system,sans-serif;
   }
+  body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
 
-  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
-
-  header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky; top: 0; z-index: 10;
+  header{
+    background:var(--surface);border-bottom:1px solid var(--border);
+    padding:14px 24px;display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:10;
   }
+  .logo{font-family:var(--mono);font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px}
+  .logo-dot{width:6px;height:6px;background:var(--text);border-radius:50%}
+  .header-right{display:flex;align-items:center;gap:14px}
+  .thresh-group{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}
+  .thresh-group input[type=range]{width:72px;accent-color:var(--text);cursor:pointer}
+  .thresh-val{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--text);min-width:30px}
+  .api-badge{font-family:var(--mono);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;color:var(--text-2);cursor:pointer;background:transparent;transition:all .15s}
+  .api-badge:hover{border-color:var(--border-strong);color:var(--text)}
+  .api-badge.connected{border-color:var(--green-bd);color:var(--green);background:var(--green-bg)}
+  .api-status{font-size:11px;font-family:var(--mono);color:var(--text-3)}
+  .api-status.live{color:var(--green)}
+  .api-status.mock{color:var(--amber)}
 
-  .logo { font-family: var(--mono); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
-  .logo-dot { width: 6px; height: 6px; background: var(--text); border-radius: 50%; }
+  main{max-width:780px;margin:0 auto;padding:28px 24px}
 
-  .header-right { display: flex; align-items: center; gap: 16px; }
+  .config-panel{display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:20px}
+  .config-panel.visible{display:block}
+  .config-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  .cfg-field label{display:block;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
 
-  .thresh-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
-  .thresh-group input[type=range] { width: 72px; accent-color: var(--text); cursor: pointer; }
-  .thresh-val { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text); min-width: 30px; }
+  .input-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+  .section-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-bottom:10px}
+  .input-row{display:flex;gap:8px;margin-bottom:12px}
+  select,input[type=text]{font-family:var(--sans);font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;outline:none;transition:border-color .15s}
+  select:focus,input[type=text]:focus{border-color:var(--border-strong)}
+  select{min-width:150px;cursor:pointer}
+  input[type=text]{flex:1}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+  .chip{font-size:12px;font-family:var(--mono);padding:4px 10px;border:1px solid var(--border);border-radius:20px;color:var(--text-2);cursor:pointer;background:transparent;transition:all .15s}
+  .chip:hover{border-color:var(--border-strong);color:var(--text)}
 
-  .api-badge {
-    font-family: var(--mono); font-size: 11px; padding: 4px 10px;
-    border: 1px solid var(--border); border-radius: 4px; color: var(--text-2);
-    cursor: pointer; background: transparent; transition: all .15s;
-  }
-  .api-badge:hover { border-color: var(--border-strong); color: var(--text); }
-  .api-badge.connected { border-color: var(--green-border); color: var(--green); background: var(--green-bg); }
+  .thresh-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px}
+  .thresh-row input[type=range]{flex:1;accent-color:var(--text);cursor:pointer}
+  .thresh-val-inline{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text);min-width:28px}
 
-  main { max-width: 780px; margin: 0 auto; padding: 28px 24px; }
+  .search-btn{width:100%;padding:11px;font-family:var(--sans);font-size:14px;font-weight:500;color:#fff;background:var(--text);border:none;border-radius:8px;cursor:pointer;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+  .search-btn:hover{opacity:.85}
+  .search-btn:disabled{opacity:.4;cursor:not-allowed}
 
-  .config-panel {
-    display: none; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
-  }
-  .config-panel.visible { display: block; }
-  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-  .cfg-field label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); margin-bottom: 5px; }
+  .results-section{display:none}
+  .results-section.visible{display:block}
+  .results-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .result-count{font-family:var(--mono);font-size:11px;color:var(--text-3)}
 
-  .input-section {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 20px; margin-bottom: 20px;
-  }
+  .result-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+  .result-card:hover{border-color:var(--border-strong)}
+  .result-card.selected{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+  .result-card.new-card{border-style:dashed}
+  .result-card.new-card.selected{border-style:solid}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .key-name{font-family:var(--mono);font-size:13px;font-weight:500;word-break:break-all}
+  .card-val{font-size:14px;color:var(--text-2);margin-bottom:8px}
+  .badge{font-size:11px;font-weight:500;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+  .badge-reuse{background:var(--green-bg);color:var(--green)}
+  .badge-similar{background:var(--amber-bg);color:var(--amber)}
+  .badge-new{background:var(--blue-bg);color:var(--blue)}
+  .sim-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .sim-bg{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+  .sim-fill{height:100%;border-radius:2px}
+  .fill-g{background:#22c55e}.fill-a{background:#f59e0b}
+  .sim-meta{font-family:var(--mono);font-size:11px;color:var(--text-3);white-space:nowrap}
 
-  .section-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 10px; }
+  .figma-section{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+  .figma-section-label{font-size:11px;color:var(--text-3);margin-bottom:6px;display:flex;align-items:center;gap:4px}
+  .ftags{display:flex;flex-wrap:wrap;gap:6px}
+  .ftag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--mono);background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-bd);border-radius:6px;padding:3px 8px;position:relative;cursor:default}
+  .ftag-desc{font-size:10px;opacity:.7}
+  .ftag-rm{opacity:.4;cursor:pointer;margin-left:2px}
+  .ftag-rm:hover{opacity:1}
+  .ftag-add{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-family:var(--mono);background:transparent;color:var(--text-3);border:1px dashed var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;transition:all .15s}
+  .ftag-add:hover{border-color:var(--purple-bd);color:var(--purple);background:var(--purple-bg)}
+  .tag-input-row{display:flex;gap:6px;margin-top:6px;align-items:center}
+  .tag-input-row input{font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:6px;width:100px;border:1px solid var(--border);background:var(--surface);color:var(--text);outline:none}
+  .tag-input-row input:focus{border-color:var(--border-strong)}
+  .tag-input-row button{font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-family:var(--sans)}
+  .tib-ok{background:var(--text);color:#fff;border-color:var(--text)}
+  .tib-cancel{background:transparent;color:var(--text-2)}
 
-  .input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .new-key-editable{font-family:var(--mono);font-size:13px;font-weight:500;background:transparent;border:none;border-bottom:1px dashed var(--border-strong);outline:none;width:100%;padding:2px 0;color:var(--text)}
+  .new-key-editable:focus{border-bottom-color:var(--text)}
+  .divider{border:none;border-top:1px solid var(--border);margin:14px 0}
 
-  select, input[type=text] {
-    font-family: var(--sans); font-size: 14px; color: var(--text);
-    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 12px; outline: none; transition: border-color .15s;
-  }
-  select:focus, input[type=text]:focus { border-color: var(--border-strong); }
-  select { min-width: 150px; cursor: pointer; }
-  input[type=text] { flex: 1; }
+  .confirm-panel{display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-top:16px}
+  .confirm-panel.visible{display:block}
+  .confirm-key{font-family:var(--mono);font-size:15px;font-weight:500;margin-bottom:4px}
+  .confirm-val{font-size:14px;color:var(--text-2);margin-bottom:10px}
+  .confirm-figma{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:24px}
+  .action-row{display:flex;gap:8px}
+  .btn-primary{flex:1;padding:10px;font-family:var(--sans);font-size:13px;font-weight:500;background:var(--text);color:#fff;border:none;border-radius:8px;cursor:pointer;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn-primary:hover{opacity:.85}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed}
+  .btn-secondary{flex:1;padding:10px;font-family:var(--sans);font-size:13px;font-weight:500;background:transparent;color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:border-color .15s}
+  .btn-secondary:hover{border-color:var(--border-strong)}
 
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
-  .chip {
-    font-size: 12px; font-family: var(--mono); padding: 4px 10px;
-    border: 1px solid var(--border); border-radius: 20px; color: var(--text-2);
-    cursor: pointer; background: transparent; transition: all .15s;
-  }
-  .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;font-size:13px;padding:10px 18px;border-radius:8px;transition:transform .3s ease;z-index:100;white-space:nowrap}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .loading-dots{display:inline-flex;gap:4px;align-items:center}
+  .loading-dots span{width:4px;height:4px;background:#fff;border-radius:50%;animation:dot .8s infinite}
+  .loading-dots span:nth-child(2){animation-delay:.15s}
+  .loading-dots span:nth-child(3){animation-delay:.3s}
+  @keyframes dot{0%,80%,100%{opacity:.2}40%{opacity:1}}
+  .empty{text-align:center;padding:32px 0;color:var(--text-3);font-size:13px;line-height:1.9}
 
-  .search-btn {
-    width: 100%; padding: 11px; font-family: var(--sans); font-size: 14px; font-weight: 500;
-    color: #fff; background: var(--text); border: none; border-radius: 8px;
-    cursor: pointer; transition: opacity .15s; display: flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .search-btn:hover { opacity: .85; }
-  .search-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-  .results-section { display: none; }
-  .results-section.visible { display: block; }
-
-  .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .result-count { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
-
-  .result-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; margin-bottom: 8px; cursor: pointer;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  .result-card:hover { border-color: var(--border-strong); }
-  .result-card.selected { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
-  .result-card.new-card { border-style: dashed; }
-  .result-card.new-card.selected { border-style: solid; }
-
-  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-  .key-name { font-family: var(--mono); font-size: 13px; font-weight: 500; word-break: break-all; }
-  .card-val { font-size: 14px; color: var(--text-2); margin-bottom: 8px; }
-
-  .badge {
-    font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
-  }
-  .badge-reuse { background: var(--green-bg); color: var(--green); }
-  .badge-similar { background: var(--amber-bg); color: var(--amber); }
-  .badge-new { background: var(--blue-bg); color: var(--blue); }
-
-  .sim-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .sim-bar-bg { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .sim-bar-fill { height: 100%; border-radius: 2px; }
-  .fill-green { background: #22c55e; }
-  .fill-amber { background: #f59e0b; }
-  .sim-meta { font-family: var(--mono); font-size: 11px; color: var(--text-3); white-space: nowrap; }
-
-  /* Figma screens section */
-  .figma-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-  .figma-section-label { font-size: 11px; color: var(--text-3); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
-  .figma-screens { display: flex; flex-wrap: wrap; gap: 6px; }
-
-  .figma-tag {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 11px; font-family: var(--mono);
-    background: var(--purple-bg); color: var(--purple);
-    border: 1px solid var(--purple-border);
-    border-radius: 6px; padding: 3px 8px;
-    cursor: pointer; transition: all .15s;
-    position: relative;
-  }
-  .figma-tag:hover { background: #DDD6FE; }
-  .figma-tag .fig-num { font-weight: 500; }
-  .figma-tag .fig-desc { color: var(--purple); opacity: .7; font-size: 10px; }
-
-  /* Tooltip */
-  .tooltip-wrap { position: relative; }
-  .tooltip-wrap:hover .tooltip-box { display: block; }
-  .tooltip-box {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--text);
-    color: #fff;
-    font-size: 11px;
-    font-family: var(--sans);
-    padding: 6px 10px;
-    border-radius: 6px;
-    white-space: nowrap;
-    z-index: 20;
-    pointer-events: none;
-  }
-  .tooltip-box::after {
-    content: '';
-    position: absolute;
-    top: 100%; left: 50%; transform: translateX(-50%);
-    border: 5px solid transparent;
-    border-top-color: var(--text);
-  }
-
-  .figma-tag-add {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 11px; font-family: var(--mono);
-    background: transparent; color: var(--text-3);
-    border: 1px dashed var(--border); border-radius: 6px;
-    padding: 3px 8px; cursor: pointer; transition: all .15s;
-  }
-  .figma-tag-add:hover { border-color: var(--purple-border); color: var(--purple); background: var(--purple-bg); }
-
-  /* Add tag inline input */
-  .tag-input-row { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
-  .tag-input-row input { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 6px; flex: 1; }
-  .tag-input-row button { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--text); color: #fff; cursor: pointer; font-family: var(--sans); }
-  .tag-input-row .btn-cancel { background: transparent; color: var(--text-2); }
-
-  .new-key-editable {
-    font-family: var(--mono); font-size: 13px; font-weight: 500;
-    background: transparent; border: none; border-bottom: 1px dashed var(--border-strong);
-    outline: none; width: 100%; padding: 2px 0; margin-bottom: 4px;
-    color: var(--text);
-  }
-  .new-key-editable:focus { border-bottom-color: var(--text); }
-
-  .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
-
-  .confirm-panel {
-    display: none; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 18px 20px; margin-top: 16px;
-  }
-  .confirm-panel.visible { display: block; }
-  .confirm-key { font-family: var(--mono); font-size: 15px; font-weight: 500; margin-bottom: 4px; }
-  .confirm-val { font-size: 14px; color: var(--text-2); margin-bottom: 12px; }
-  .confirm-figma { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-
-  .action-row { display: flex; gap: 8px; }
-  .btn-primary {
-    flex: 1; padding: 10px; font-family: var(--sans); font-size: 13px; font-weight: 500;
-    background: var(--text); color: #fff; border: none; border-radius: 8px; cursor: pointer; transition: opacity .15s;
-  }
-  .btn-primary:hover { opacity: .85; }
-  .btn-secondary {
-    flex: 1; padding: 10px; font-family: var(--sans); font-size: 13px; font-weight: 500;
-    background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border-color .15s;
-  }
-  .btn-secondary:hover { border-color: var(--border-strong); }
-
-  .toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
-    background: var(--text); color: #fff; font-size: 13px; padding: 10px 18px;
-    border-radius: 8px; transition: transform .3s ease; z-index: 100; white-space: nowrap;
-  }
-  .toast.show { transform: translateX(-50%) translateY(0); }
-
-  .loading-dots { display: inline-flex; gap: 4px; align-items: center; }
-  .loading-dots span { width: 4px; height: 4px; background: #fff; border-radius: 50%; animation: dot .8s infinite; }
-  .loading-dots span:nth-child(2) { animation-delay: .15s; }
-  .loading-dots span:nth-child(3) { animation-delay: .3s; }
-  @keyframes dot { 0%,80%,100%{opacity:.2} 40%{opacity:1} }
-
-  .empty-state { text-align: center; padding: 28px 0; color: var(--text-3); font-size: 13px; line-height: 1.8; }
-
-  .selected-check {
-    display: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text);
-    align-items: center; justify-content: center; flex-shrink: 0;
-  }
-  .selected-check svg { width: 10px; height: 10px; }
-  .result-card.selected .selected-check { display: flex; }
-  .result-card.selected .badge { display: none; }
+  /* tooltip */
+  .tip-wrap{position:relative}
+  .tip-wrap:hover .tip-box{display:block}
+  .tip-box{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--text);color:#fff;font-size:11px;padding:6px 10px;border-radius:6px;white-space:nowrap;z-index:20;pointer-events:none}
+  .tip-box::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--text)}
 </style>
 </head>
 <body>
@@ -252,6 +138,7 @@
 <header>
   <div class="logo"><span class="logo-dot"></span>string key tool</div>
   <div class="header-right">
+    <span class="api-status mock" id="api-status">● mock</span>
     <div class="thresh-group">
       <span>재사용</span>
       <input type="range" id="thresh-reuse" min="50" max="99" value="85" oninput="updateThresh()">
@@ -266,6 +153,7 @@
 
 <main>
 
+  <!-- API 설정 패널 -->
   <div class="config-panel" id="config-panel">
     <div class="section-label" style="margin-bottom:14px">Tolgee 연결 설정</div>
     <div class="config-grid">
@@ -273,9 +161,13 @@
       <div class="cfg-field"><label>Project ID</label><input type="text" id="cfg-project" placeholder="12345" style="width:100%"></div>
     </div>
     <div class="cfg-field" style="margin-bottom:14px"><label>API Key</label><input type="text" id="cfg-key" placeholder="tgpak_..." style="width:100%;font-family:var(--mono);font-size:12px"></div>
-    <button class="btn-primary" style="width:auto;padding:8px 20px;font-size:13px" onclick="saveConfig()">연결 확인</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn-primary" style="flex:none;padding:8px 20px;font-size:13px" onclick="saveConfig()">연결 저장</button>
+      <button class="btn-secondary" style="flex:none;padding:8px 16px;font-size:13px" onclick="testConnection()">연결 테스트</button>
+    </div>
   </div>
 
+  <!-- 검색 영역 -->
   <div class="input-section">
     <div class="section-label">문자열 검색</div>
     <div class="input-row">
@@ -298,12 +190,21 @@
       <button class="chip" onclick="setChip('이름을 입력해주세요')">이름을 입력해주세요</button>
       <button class="chip" onclick="setChip('오류가 발생했습니다')">오류가 발생했습니다</button>
     </div>
+    <div class="thresh-row">
+      <span>재사용 임계값</span>
+      <input type="range" id="thr-reuse2" min="50" max="99" value="85" oninput="syncThresh('reuse',this.value)">
+      <span class="thresh-val-inline" id="tvr2">85%</span>
+      <span style="margin-left:10px">유사 임계값</span>
+      <input type="range" id="thr-sim2" min="30" max="84" value="50" oninput="syncThresh('sim',this.value)">
+      <span class="thresh-val-inline" id="tvs2">50%</span>
+    </div>
     <button class="search-btn" id="search-btn" onclick="doSearch()">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       유사 문자열 검색
     </button>
   </div>
 
+  <!-- 결과 영역 -->
   <div class="results-section" id="results-section">
     <div class="results-header">
       <span class="section-label" style="margin:0">검색 결과</span>
@@ -312,11 +213,11 @@
     <div id="cards-area"></div>
     <div class="confirm-panel" id="confirm-panel">
       <div class="section-label" style="margin-bottom:10px">선택된 키</div>
-      <div class="confirm-key" id="confirm-key"></div>
-      <div class="confirm-val" id="confirm-val"></div>
-      <div class="confirm-figma" id="confirm-figma"></div>
+      <div class="confirm-key" id="c-key"></div>
+      <div class="confirm-val" id="c-val"></div>
+      <div class="confirm-figma" id="c-figma"></div>
       <div class="action-row">
-        <button class="btn-primary" onclick="registerKey()">Tolgee에 등록</button>
+        <button class="btn-primary" id="register-btn" onclick="registerKey()">Tolgee에 등록</button>
         <button class="btn-secondary" onclick="copyKey()">키 복사</button>
       </div>
     </div>
@@ -327,159 +228,207 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const FEATURE_MAP = {
-  '1': '회원가입', '2': '홈 피드', '3': '온보딩', '4': '프로필', '5': '결제'
-};
+// ── Tolgee API ────────────────────────────────────────────────────────────────
+class TolgeeAPI {
+  constructor({baseUrl, projectId, apiKey}) {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.projectId = projectId;
+    this.apiKey = apiKey;
+  }
+  get headers() {
+    return { 'Content-Type': 'application/json', 'X-API-Key': this.apiKey };
+  }
+  async fetchAllKeys({ lang = 'ko', pageSize = 200 } = {}) {
+    let page = 0, all = [], totalPages = 1;
+    while (page < totalPages) {
+      const url = `${this.baseUrl}/v2/projects/${this.projectId}/translations`
+        + `?languages=${lang}&size=${pageSize}&page=${page}`;
+      const res = await fetch(url, { headers: this.headers });
+      if (!res.ok) throw new Error(`Tolgee ${res.status}: ${res.statusText}`);
+      const data = await res.json();
+      totalPages = data.page?.totalPages || 1;
+      (data._embedded?.keys || []).forEach(item => {
+        const val = item.translations?.[lang]?.text || '';
+        const figmaTags = (item.keyTags || [])
+          .filter(t => t.name.startsWith('figma:'))
+          .map(t => t.name.replace('figma:', ''));
+        all.push({ key: item.keyName, val, figmaTags, usage: figmaTags.length || 1, keyId: item.keyId });
+      });
+      page++;
+    }
+    return all;
+  }
+  async createKey({ keyName, translations = {}, tags = [] }) {
+    const url = `${this.baseUrl}/v2/projects/${this.projectId}/keys/create`;
+    const res = await fetch(url, {
+      method: 'POST', headers: this.headers,
+      body: JSON.stringify({ name: keyName, translations, tags: tags.map(n => ({ name: n })) }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `키 생성 실패: ${res.status}`); }
+    return res.json();
+  }
+  async addTags(keyId, newTags = []) {
+    const getRes = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, { headers: this.headers });
+    if (!getRes.ok) throw new Error(`키 조회 실패: ${getRes.status}`);
+    const keyData = await getRes.json();
+    const merged = [...new Set([...(keyData.tags || []).map(t => t.name), ...newTags])];
+    const putRes = await fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}/tags`,
+      { method: 'PUT', headers: this.headers, body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }) }
+    );
+    if (!putRes.ok) throw new Error(`태그 업데이트 실패: ${putRes.status}`);
+    return putRes.json();
+  }
+  async registerKey({ keyName, val, lang = 'ko', figmaTags = [], existingKeyId = null }) {
+    const tags = ['lint:passed', ...figmaTags.map(t => `figma:${t}`)];
+    if (existingKeyId) {
+      await this.addTags(existingKeyId, tags);
+      return { type: 'tag-added', keyName };
+    }
+    const result = await this.createKey({ keyName, translations: { [lang]: val }, tags });
+    return { type: 'created', keyName, keyId: result.id };
+  }
+  async testConnection() {
+    const url = `${this.baseUrl}/v2/projects/${this.projectId}`;
+    const res = await fetch(url, { headers: this.headers });
+    if (!res.ok) throw new Error(`연결 실패: ${res.status} ${res.statusText}`);
+    return res.json();
+  }
+}
 
+// ── 상태 ──────────────────────────────────────────────────────────────────────
+let tolgeeApi = null;
+let keysCache = null;
+let cacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+let selKey = null, selVal = null, selTags = [], selExistingKeyId = null;
+let cardTags = {};
+let configVisible = false;
+
+const FEATURE_MAP = { '1': '회원가입', '2': '홈 피드', '3': '온보딩', '4': '프로필', '5': '결제' };
+
+// fallback mock
 const MOCK_DB = [
-  {
-    key: 'common.btn.confirm', val: '확인', usage: 12,
-    figmaTags: ['1.1.3', '2.1.1', '3.1.2', '4.2.1']
-  },
-  {
-    key: 'common.btn.cancel', val: '취소', usage: 9,
-    figmaTags: ['1.1.3', '3.2.2', '4.1.1']
-  },
-  {
-    key: 'common.btn.save', val: '저장', usage: 7,
-    figmaTags: ['4.1.2', '4.2.1']
-  },
-  {
-    key: 'common.btn.cta', val: '다음으로', usage: 3,
-    figmaTags: ['3.1.1', '3.1.2', '3.2.1']
-  },
-  {
-    key: 'common.btn.continue', val: '계속하기', usage: 2,
-    figmaTags: ['1.1.2', '3.1.3']
-  },
-  {
-    key: 'common.error.generic', val: '오류가 발생했습니다', usage: 6,
-    figmaTags: ['1.2.1', '2.1.3', '5.1.2']
-  },
-  {
-    key: 'common.error.network', val: '네트워크 오류가 발생했습니다', usage: 3,
-    figmaTags: ['2.1.3', '5.1.2']
-  },
-  {
-    key: 'onboarding.name_input.btn.next', val: '다음', usage: 1,
-    figmaTags: ['3.1.1']
-  },
-  {
-    key: 'onboarding.name_input.input.placeholder', val: '이름을 입력해주세요', usage: 1,
-    figmaTags: ['3.1.1']
-  },
-  {
-    key: 'profile.name_edit.btn.save', val: '저장하기', usage: 1,
-    figmaTags: ['4.1.2']
-  },
-  {
-    key: 'home.feed.label.empty', val: '아직 게시물이 없어요', usage: 1,
-    figmaTags: ['2.1.2']
-  },
-  {
-    key: 'payment.toast.error', val: '결제에 실패했습니다', usage: 1,
-    figmaTags: ['5.1.3']
-  },
+  { key:'common.btn.confirm', val:'확인', usage:12, figmaTags:['1.1.3','2.1.1','3.1.2'] },
+  { key:'common.btn.cancel', val:'취소', usage:9, figmaTags:['1.1.3','3.2.2'] },
+  { key:'common.btn.save', val:'저장', usage:7, figmaTags:['4.1.2','4.2.1'] },
+  { key:'common.btn.cta', val:'다음으로', usage:3, figmaTags:['3.1.1','3.1.2','3.2.1'] },
+  { key:'common.btn.continue', val:'계속하기', usage:2, figmaTags:['1.1.2','3.1.3'] },
+  { key:'common.error.generic', val:'오류가 발생했습니다', usage:6, figmaTags:['1.2.1','2.1.3','5.1.2'] },
+  { key:'common.error.network', val:'네트워크 오류가 발생했습니다', usage:3, figmaTags:['2.1.3','5.1.2'] },
+  { key:'onboarding.name_input.btn.next', val:'다음', usage:1, figmaTags:['3.1.1'] },
+  { key:'onboarding.name_input.input.placeholder', val:'이름을 입력해주세요', usage:1, figmaTags:['3.1.1'] },
+  { key:'profile.name_edit.btn.save', val:'저장하기', usage:1, figmaTags:['4.1.2'] },
+  { key:'home.feed.label.empty', val:'아직 게시물이 없어요', usage:1, figmaTags:['2.1.2'] },
+  { key:'payment.toast.error', val:'결제에 실패했습니다', usage:1, figmaTags:['5.1.3'] },
 ];
 
-let selectedKey = null;
-let selectedVal = null;
-let selectedFigmaTags = [];
-let configVisible = false;
-let apiConnected = false;
-
-function parseFigmaTag(tag) {
-  const parts = tag.split('.');
-  if (parts.length !== 3) return null;
-  const [feat, ver, screen] = parts;
-  const featName = FEATURE_MAP[feat] || `기능${feat}`;
-  return { feat, ver, screen, label: tag, featName, desc: `${featName} v${ver} · ${screen}번 화면` };
+// ── API 인스턴스 관리 ─────────────────────────────────────────────────────────
+function getApi() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const pid = document.getElementById('cfg-project').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if (!url || !pid || !key) return null;
+  if (!tolgeeApi || tolgeeApi.baseUrl !== url || tolgeeApi.projectId !== pid || tolgeeApi.apiKey !== key)
+    tolgeeApi = new TolgeeAPI({ baseUrl: url, projectId: pid, apiKey: key });
+  return tolgeeApi;
 }
 
-function updateThresh() {
-  const r = parseInt(document.getElementById('thresh-reuse').value);
-  const s = parseInt(document.getElementById('thresh-similar').value);
-  if (s >= r) { document.getElementById('thresh-similar').value = r - 1; }
-  document.getElementById('tv-reuse').textContent = r + '%';
-  document.getElementById('tv-similar').textContent = Math.min(s, r - 1) + '%';
+async function getCachedKeys() {
+  const api = getApi();
+  if (!api) return null;
+  if (keysCache && Date.now() - cacheTime < CACHE_TTL) return keysCache;
+  keysCache = await api.fetchAllKeys();
+  cacheTime = Date.now();
+  return keysCache;
 }
 
-function levenshtein(a, b) {
-  const m = a.length, n = b.length;
-  const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i===0?j:j===0?i:0));
-  for (let i=1;i<=m;i++) for (let j=1;j<=n;j++)
-    dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
-  return dp[m][n];
+function setApiStatus(mode) {
+  const el = document.getElementById('api-status');
+  const btn = document.getElementById('api-btn');
+  if (mode === 'live') {
+    el.textContent = '● live'; el.className = 'api-status live';
+    btn.classList.add('connected'); btn.textContent = '연결됨';
+  } else {
+    el.textContent = '● mock'; el.className = 'api-status mock';
+    btn.classList.remove('connected'); btn.textContent = 'API 설정';
+  }
 }
 
-function similarity(a, b) {
-  if (a===b) return 100;
-  const mx = Math.max(a.length, b.length);
-  return mx===0 ? 100 : Math.round((1 - levenshtein(a,b)/mx)*100);
-}
-
-function generateKey(screen, val) {
-  const compMap = [
-    [/(버튼|클릭|확인|취소|저장|다음|이전|계속|시작|완료|제출|등록|삭제|수정)/, 'btn'],
-    [/(입력|placeholder)/, 'input'],
-    [/(오류|에러|실패|error)/, 'error'],
-    [/(비어|없어|empty)/, 'empty'],
-    [/(로딩)/, 'loading'],
-    [/(토스트)/, 'toast'],
-  ];
-  let comp = 'label';
-  for (const [re,c] of compMap) { if (re.test(val)) { comp=c; break; } }
-  const elemMap = [
-    [/(다음|계속|시작|완료|제출)/, 'cta'],
-    [/(저장)/, 'save'], [/(취소)/, 'cancel'], [/(확인)/, 'confirm'], [/(삭제)/, 'delete'],
-  ];
-  let elem = '';
-  for (const [re,e] of elemMap) { if (re.test(val)) { elem=e; break; } }
-  return [screen, comp, elem].filter(Boolean).join('.');
-}
-
-function renderFigmaTagsHTML(tags, cardId, editable=false) {
-  if (!tags || tags.length === 0) return editable ? renderAddTagBtn(cardId) : '';
-  let html = '';
-  tags.forEach((tag, i) => {
-    const info = parseFigmaTag(tag);
-    if (!info) return;
-    html += `
-      <div class="tooltip-wrap">
-        <span class="figma-tag" onclick="event.stopPropagation()">
-          <span class="fig-num">${info.label}</span>
-          <span class="fig-desc">${info.featName} v${info.ver}</span>
-          ${editable ? `<span onclick="removeTag('${cardId}',${i})" style="margin-left:2px;opacity:.5;cursor:pointer">×</span>` : ''}
-        </span>
-        <div class="tooltip-box">${info.desc}</div>
-      </div>`;
-  });
-  if (editable) html += renderAddTagBtn(cardId);
-  return html;
-}
-
-function renderAddTagBtn(cardId) {
-  return `<button class="figma-tag-add" onclick="event.stopPropagation();showTagInput('${cardId}')">+ Figma 화면</button>`;
-}
-
-function setChip(val) { document.getElementById('str-input').value = val; }
+// ── 설정 ──────────────────────────────────────────────────────────────────────
 function toggleConfig() {
   configVisible = !configVisible;
   document.getElementById('config-panel').classList.toggle('visible', configVisible);
 }
+
 function saveConfig() {
-  const url = document.getElementById('cfg-url').value;
-  const proj = document.getElementById('cfg-project').value;
-  const key = document.getElementById('cfg-key').value;
-  if (url && proj && key) {
-    apiConnected = true;
-    document.getElementById('api-btn').classList.add('connected');
-    document.getElementById('api-btn').textContent = '연결됨';
-    showToast('연결 설정이 저장되었습니다');
-    configVisible = false;
-    document.getElementById('config-panel').classList.remove('visible');
-  } else showToast('모든 항목을 입력해주세요');
+  tolgeeApi = null; keysCache = null; cacheTime = 0;
+  const api = getApi();
+  setApiStatus(api ? 'live' : 'mock');
+  showToast(api ? '저장 완료 — 다음 검색 시 Tolgee에서 불러와요' : '입력값을 확인해주세요');
+  if (api) { configVisible = false; document.getElementById('config-panel').classList.remove('visible'); }
 }
+
+async function testConnection() {
+  const api = getApi();
+  if (!api) { showToast('API 정보를 먼저 입력해주세요'); return; }
+  try {
+    const data = await api.testConnection();
+    showToast(`✓ 연결 성공: ${data.name || 'Project'}`);
+    setApiStatus('live');
+  } catch (e) {
+    showToast(`✗ ${e.message}`);
+    setApiStatus('mock');
+  }
+}
+
+// ── 유사도 ────────────────────────────────────────────────────────────────────
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m+1 }, (_, i) => Array.from({ length: n+1 }, (_, j) => i===0?j:j===0?i:0));
+  for (let i=1;i<=m;i++) for (let j=1;j<=n;j++)
+    dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+function sim(a, b) { if(a===b)return 100; const mx=Math.max(a.length,b.length); return mx===0?100:Math.round((1-lev(a,b)/mx)*100); }
+
+function genKey(screen, val) {
+  const cm = [[/(버튼|클릭|확인|취소|저장|다음|이전|계속|시작|완료|제출|등록|삭제)/,'btn'],[/(입력|placeholder)/,'input'],[/(오류|에러|실패)/,'error'],[/(비어|없어)/,'empty'],[/(로딩)/,'loading']];
+  let comp = 'label'; for (const [re,c] of cm) { if(re.test(val)){comp=c;break;} }
+  const em = [[/(다음|계속|시작|완료|제출)/,'cta'],[/(저장)/,'save'],[/(취소)/,'cancel'],[/(확인)/,'confirm'],[/(삭제)/,'delete']];
+  let elem = ''; for (const [re,e] of em) { if(re.test(val)){elem=e;break;} }
+  return [screen,comp,elem].filter(Boolean).join('.');
+}
+
+// ── 임계값 ────────────────────────────────────────────────────────────────────
+function updateThresh() {
+  const r = parseInt(document.getElementById('thresh-reuse').value);
+  let s = parseInt(document.getElementById('thresh-similar').value);
+  if (s >= r) { s = r-1; document.getElementById('thresh-similar').value = s; }
+  document.getElementById('tv-reuse').textContent = r+'%';
+  document.getElementById('tv-similar').textContent = s+'%';
+  document.getElementById('thr-reuse2').value = r;
+  document.getElementById('thr-sim2').value = s;
+  document.getElementById('tvr2').textContent = r+'%';
+  document.getElementById('tvs2').textContent = s+'%';
+}
+function syncThresh(type, val) {
+  val = parseInt(val);
+  const r = parseInt(document.getElementById('thresh-reuse').value);
+  const s = parseInt(document.getElementById('thresh-similar').value);
+  if (type === 'reuse') {
+    document.getElementById('thresh-reuse').value = val;
+    if (s >= val) { document.getElementById('thresh-similar').value = val-1; document.getElementById('thr-sim2').value = val-1; document.getElementById('tvs2').textContent = (val-1)+'%'; document.getElementById('tv-similar').textContent = (val-1)+'%'; }
+    document.getElementById('tv-reuse').textContent = val+'%'; document.getElementById('tvr2').textContent = val+'%';
+  } else {
+    document.getElementById('thresh-similar').value = val;
+    document.getElementById('tv-similar').textContent = val+'%'; document.getElementById('tvs2').textContent = val+'%';
+  }
+}
+function getThresh() { return { reuse: parseInt(document.getElementById('thresh-reuse').value), sim: parseInt(document.getElementById('thresh-similar').value) }; }
+
+// ── 검색 ──────────────────────────────────────────────────────────────────────
+function setChip(v) { document.getElementById('str-input').value = v; }
 
 async function doSearch() {
   const val = document.getElementById('str-input').value.trim();
@@ -487,215 +436,208 @@ async function doSearch() {
   const btn = document.getElementById('search-btn');
   btn.innerHTML = '<span class="loading-dots"><span></span><span></span><span></span></span>';
   btn.disabled = true;
-  await new Promise(r => setTimeout(r, 550));
-  const thresh = { reuse: parseInt(document.getElementById('thresh-reuse').value), similar: parseInt(document.getElementById('thresh-similar').value) };
-  const results = MOCK_DB.map(item => ({...item, sim: similarity(val, item.val)}))
-    .filter(item => item.sim >= thresh.similar).sort((a,b) => b.sim-a.sim).slice(0,5);
-  renderResults(val, results, thresh);
-  btn.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 유사 문자열 검색';
-  btn.disabled = false;
+  selKey = null; selVal = null; selTags = []; selExistingKeyId = null;
+  document.getElementById('confirm-panel').classList.remove('visible');
+  const thresh = getThresh();
+  try {
+    let db;
+    const api = getApi();
+    if (api) {
+      try {
+        db = await getCachedKeys();
+        setApiStatus('live');
+      } catch(e) {
+        showToast(`API 오류: ${e.message} — Mock으로 검색`);
+        setApiStatus('mock');
+        db = MOCK_DB;
+      }
+    } else {
+      db = MOCK_DB;
+    }
+    const results = db
+      .map(item => ({ ...item, sim: sim(val, item.val) }))
+      .filter(item => item.sim >= thresh.sim)
+      .sort((a, b) => b.sim - a.sim)
+      .slice(0, 8);
+    renderResults(val, results, thresh);
+  } finally {
+    btn.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 유사 문자열 검색';
+    btn.disabled = false;
+  }
 }
 
-const cardFigmaTags = {};
+// ── Figma 태그 렌더 ──────────────────────────────────────────────────────────
+function parseFigmaTag(tag) {
+  const p = tag.split('.');
+  if (p.length !== 3) return null;
+  const [f, v, s] = p;
+  const name = FEATURE_MAP[f] || `기능${f}`;
+  return { feat:f, ver:v, screen:s, label:tag, name, desc:`${name} v${v} · ${s}번 화면` };
+}
 
-function renderResults(inputVal, results, thresh) {
-  const screen = document.getElementById('screen-sel').value;
-  const area = document.getElementById('cards-area');
-  const section = document.getElementById('results-section');
-  section.classList.add('visible');
-  selectedKey = null; selectedVal = null; selectedFigmaTags = [];
-  document.getElementById('confirm-panel').classList.remove('visible');
-  document.getElementById('result-count').textContent = results.length > 0 ? `${results.length}개 유사 항목` : '일치 없음';
-
-  let html = '';
-
-  if (results.length === 0) {
-    html += `<div class="empty-state">유사한 기존 문자열이 없어요.<br>아래에서 신규 키를 만들어 등록하세요.</div>`;
-  } else {
-    results.forEach((item, i) => {
-      const isReuse = item.sim >= thresh.reuse;
-      const badgeClass = isReuse ? 'badge-reuse' : 'badge-similar';
-      const badgeLabel = isReuse ? `재사용 추천 · ${item.sim}%` : `유사 · ${item.sim}%`;
-      const fillClass = isReuse ? 'fill-green' : 'fill-amber';
-      const cardId = `card-existing-${i}`;
-      cardFigmaTags[cardId] = [...(item.figmaTags || [])];
-      html += `
-        <div class="result-card" id="${cardId}" onclick="selectExisting(this,'${item.key}','${item.val.replace(/'/g,"\\'")}')">
-          <div class="card-top">
-            <div class="key-name">${item.key}</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge ${badgeClass}">${badgeLabel}</span>
-              <div class="selected-check"><svg fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-            </div>
-          </div>
-          <div class="card-val">${item.val}</div>
-          <div class="sim-row">
-            <div class="sim-bar-bg"><div class="sim-bar-fill ${fillClass}" style="width:${item.sim}%"></div></div>
-            <span class="sim-meta">${item.usage}개 화면 사용 중</span>
-          </div>
-          <div class="figma-section">
-            <div class="figma-section-label">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><circle cx="17" cy="17" r="4"/></svg>
-              Figma 화면
-            </div>
-            <div class="figma-screens" id="tags-${cardId}">${renderFigmaTagsHTML(cardFigmaTags[cardId], cardId, false)}</div>
-          </div>
-        </div>`;
-    });
-  }
-
-  const newKey = generateKey(screen, inputVal);
-  const newCardId = 'card-new';
-  cardFigmaTags[newCardId] = [];
-  html += `<hr class="divider">
-    <div class="result-card new-card" id="${newCardId}" onclick="selectNew(this,'${inputVal.replace(/'/g,"\\'")}')">
-      <div class="card-top">
-        <div style="flex:1">
-          <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">신규 키 (직접 수정 가능)</div>
-          <input class="new-key-editable" id="new-key-input" value="${newKey}" onclick="event.stopPropagation()" oninput="onNewKeyInput(this.value)">
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="badge badge-new">신규 생성</span>
-          <div class="selected-check"><svg fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-      </div>
-      <div class="card-val" style="color:var(--text-3)">${inputVal}</div>
-      <div class="figma-section">
-        <div class="figma-section-label">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><circle cx="17" cy="17" r="4"/></svg>
-          Figma 화면 연결
-        </div>
-        <div class="figma-screens" id="tags-card-new">${renderAddTagBtn(newCardId)}</div>
-      </div>
+function renderFtagsHTML(tags, cardId, editable) {
+  let h = '';
+  (tags || []).forEach((tag, i) => {
+    const info = parseFigmaTag(tag); if (!info) return;
+    h += `<div class="tip-wrap">
+      <span class="ftag">
+        <span>${info.label}</span>
+        <span class="ftag-desc">${info.name} v${info.ver}</span>
+        ${editable ? `<span class="ftag-rm" onclick="removeTag('${cardId}',${i})">×</span>` : ''}
+      </span>
+      <div class="tip-box">${info.desc}</div>
     </div>`;
-
-  area.innerHTML = html;
+  });
+  if (editable) h += `<button class="ftag-add" onclick="showTagInput('${cardId}')">+ Figma</button>`;
+  return h;
 }
 
 function showTagInput(cardId) {
-  const container = document.getElementById(`tags-${cardId}`);
-  const addBtn = container.querySelector('.figma-tag-add');
-  if (addBtn) addBtn.style.display = 'none';
-  const row = document.createElement('div');
-  row.className = 'tag-input-row';
-  row.id = `tag-input-row-${cardId}`;
-  row.innerHTML = `
-    <input type="text" placeholder="예: 3.1.1" id="tag-input-${cardId}" onclick="event.stopPropagation()" style="width:100px">
-    <button onclick="event.stopPropagation();addTag('${cardId}')">추가</button>
-    <button class="btn-cancel" onclick="event.stopPropagation();cancelTagInput('${cardId}')">취소</button>`;
-  container.appendChild(row);
-  document.getElementById(`tag-input-${cardId}`).focus();
-  document.getElementById(`tag-input-${cardId}`).addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); addTag(cardId); }
-    e.stopPropagation();
+  const c = document.getElementById(`tags-${cardId}`);
+  const ab = c.querySelector('.ftag-add'); if (ab) ab.style.display = 'none';
+  const row = document.createElement('div'); row.className = 'tag-input-row'; row.id = `tir-${cardId}`;
+  row.innerHTML = `<input type="text" placeholder="예: 3.1.1" id="ti-${cardId}">
+    <button class="tib-ok" onclick="addTag('${cardId}')">추가</button>
+    <button class="tib-cancel" onclick="cancelTagInput('${cardId}')">취소</button>`;
+  c.appendChild(row);
+  const inp = document.getElementById(`ti-${cardId}`);
+  inp.focus();
+  inp.addEventListener('keydown', e => { if(e.key==='Enter'){e.preventDefault();addTag(cardId);} });
+}
+function cancelTagInput(cId) {
+  const r = document.getElementById(`tir-${cId}`); if(r) r.remove();
+  const c = document.getElementById(`tags-${cId}`);
+  if (!c.querySelector('.ftag-add')) c.insertAdjacentHTML('beforeend', `<button class="ftag-add" onclick="showTagInput('${cId}')">+ Figma</button>`);
+}
+function addTag(cId) {
+  const inp = document.getElementById(`ti-${cId}`);
+  const v = inp.value.trim();
+  if (!v.match(/^\d+\.\d+\.\d+$/)) { showToast('형식: 기능.버전.화면 (예: 3.1.1)'); return; }
+  if (!cardTags[cId]) cardTags[cId] = [];
+  if (cardTags[cId].includes(v)) { showToast('이미 추가됨'); return; }
+  cardTags[cId].push(v);
+  document.getElementById(`tags-${cId}`).innerHTML = renderFtagsHTML(cardTags[cId], cId, true);
+  if (selKey && document.getElementById(cId)?.classList.contains('selected')) { selTags = [...cardTags[cId]]; updateConfirmTags(); }
+}
+function removeTag(cId, idx) {
+  cardTags[cId].splice(idx, 1);
+  document.getElementById(`tags-${cId}`).innerHTML = renderFtagsHTML(cardTags[cId], cId, true);
+  if (selKey && document.getElementById(cId)?.classList.contains('selected')) { selTags = [...cardTags[cId]]; updateConfirmTags(); }
+}
+
+// ── 결과 렌더 ────────────────────────────────────────────────────────────────
+function renderResults(inputVal, results, thresh) {
+  const screen = document.getElementById('screen-sel').value;
+  const area = document.getElementById('cards-area');
+  document.getElementById('results-section').classList.add('visible');
+  document.getElementById('result-count').textContent = results.length > 0 ? `${results.length}개 유사 항목` : '일치 없음';
+  let html = '';
+  if (!results.length) html = `<div class="empty">유사한 기존 문자열이 없어요.<br>아래에서 신규 키를 만들어 등록하세요.</div>`;
+  results.forEach((item, i) => {
+    const isR = item.sim >= thresh.reuse;
+    const bCls = isR ? 'badge-reuse' : 'badge-similar';
+    const bLbl = isR ? `재사용 추천 · ${item.sim}%` : `유사 · ${item.sim}%`;
+    const fCls = isR ? 'fill-g' : 'fill-a';
+    const cId = `ce-${i}`; cardTags[cId] = [...(item.figmaTags || [])];
+    html += `<div class="result-card" id="${cId}" onclick="selExisting(this,'${item.key}','${item.val.replace(/'/g,"\\'")}','${item.keyId||''}')">
+      <div class="card-top">
+        <div class="key-name">${item.key}</div>
+        <span class="badge ${bCls}">${bLbl}</span>
+      </div>
+      <div class="card-val">${item.val}</div>
+      <div class="sim-row"><div class="sim-bg"><div class="sim-fill ${fCls}" style="width:${item.sim}%"></div></div><span class="sim-meta">${item.usage}개 화면 사용</span></div>
+      <div class="figma-section">
+        <div class="figma-section-label">📱 Figma 화면</div>
+        <div class="ftags" id="tags-${cId}">${renderFtagsHTML(cardTags[cId], cId, false)}</div>
+      </div>
+    </div>`;
   });
+  const nk = genKey(screen, inputVal);
+  cardTags['cn'] = [];
+  html += `<hr class="divider">
+  <div class="result-card new-card" id="cn" onclick="selNew(this,'${inputVal.replace(/'/g,"\\'")}')">
+    <div class="card-top">
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">신규 키 (직접 수정 가능)</div>
+        <input class="new-key-editable" id="nki" value="${nk}" onclick="event.stopPropagation()" oninput="onNKI(this.value)">
+      </div>
+      <span class="badge badge-new">신규 생성</span>
+    </div>
+    <div class="card-val" style="color:var(--text-3)">${inputVal}</div>
+    <div class="figma-section">
+      <div class="figma-section-label">📱 Figma 화면 연결</div>
+      <div class="ftags" id="tags-cn"><button class="ftag-add" onclick="showTagInput('cn')">+ Figma</button></div>
+    </div>
+  </div>`;
+  area.innerHTML = html;
 }
 
-function cancelTagInput(cardId) {
-  const row = document.getElementById(`tag-input-row-${cardId}`);
-  if (row) row.remove();
-  const container = document.getElementById(`tags-${cardId}`);
-  if (!container.querySelector('.figma-tag-add')) {
-    container.insertAdjacentHTML('beforeend', renderAddTagBtn(cardId));
-  }
-}
-
-function addTag(cardId) {
-  const input = document.getElementById(`tag-input-${cardId}`);
-  const val = input.value.trim();
-  if (!val.match(/^\d+\.\d+\.\d+$/)) { showToast('형식: 기능.버전.화면 (예: 3.1.1)'); return; }
-  if (!cardFigmaTags[cardId]) cardFigmaTags[cardId] = [];
-  if (cardFigmaTags[cardId].includes(val)) { showToast('이미 추가된 화면이에요'); return; }
-  cardFigmaTags[cardId].push(val);
-  const editable = cardId === 'card-new' || cardId.startsWith('card-existing');
-  document.getElementById(`tags-${cardId}`).innerHTML = renderFigmaTagsHTML(cardFigmaTags[cardId], cardId, true);
-  if (selectedKey && document.getElementById(cardId).classList.contains('selected')) {
-    selectedFigmaTags = [...cardFigmaTags[cardId]];
-    updateConfirmFigma();
-  }
-}
-
-function removeTag(cardId, idx) {
-  cardFigmaTags[cardId].splice(idx, 1);
-  document.getElementById(`tags-${cardId}`).innerHTML = renderFigmaTagsHTML(cardFigmaTags[cardId], cardId, true);
-  if (selectedKey && document.getElementById(cardId).classList.contains('selected')) {
-    selectedFigmaTags = [...cardFigmaTags[cardId]];
-    updateConfirmFigma();
-  }
-}
-
-function selectExisting(el, key, val) {
+function selExisting(el, key, val, keyId) {
   document.querySelectorAll('.result-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
-  const cardId = el.id;
-  selectedKey = key; selectedVal = val;
-  selectedFigmaTags = [...(cardFigmaTags[cardId] || [])];
-  const tags = document.getElementById(`tags-${cardId}`);
-  if (tags && !tags.querySelector('.figma-tag-add')) {
-    tags.innerHTML = renderFigmaTagsHTML(cardFigmaTags[cardId], cardId, true);
-  }
+  selKey = key; selVal = val; selExistingKeyId = keyId || null;
+  selTags = [...(cardTags[el.id] || [])];
+  const tags = document.getElementById(`tags-${el.id}`);
+  if (tags && !tags.querySelector('.ftag-add')) tags.innerHTML = renderFtagsHTML(cardTags[el.id], el.id, true);
   showConfirm(key, val);
 }
-
-function selectNew(el, val) {
+function selNew(el, val) {
   document.querySelectorAll('.result-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
-  const key = document.getElementById('new-key-input').value || generateKey(document.getElementById('screen-sel').value, val);
-  selectedKey = key; selectedVal = val;
-  selectedFigmaTags = [...(cardFigmaTags['card-new'] || [])];
-  showConfirm(key, val);
+  selExistingKeyId = null;
+  selKey = document.getElementById('nki').value || genKey(document.getElementById('screen-sel').value, val);
+  selVal = val; selTags = [...(cardTags['cn'] || [])];
+  showConfirm(selKey, val);
 }
-
-function onNewKeyInput(val) {
-  selectedKey = val;
-  document.getElementById('confirm-key').textContent = val;
-}
+function onNKI(v) { selKey = v; document.getElementById('c-key').textContent = v; }
 
 function showConfirm(key, val) {
-  document.getElementById('confirm-key').textContent = key;
-  document.getElementById('confirm-val').textContent = val;
-  updateConfirmFigma();
+  document.getElementById('c-key').textContent = key;
+  document.getElementById('c-val').textContent = val;
+  updateConfirmTags();
   document.getElementById('confirm-panel').classList.add('visible');
 }
-
-function updateConfirmFigma() {
-  const el = document.getElementById('confirm-figma');
-  if (selectedFigmaTags.length === 0) {
-    el.innerHTML = `<span style="font-size:12px;color:var(--text-3)">연결된 Figma 화면 없음</span>`;
-    return;
-  }
-  el.innerHTML = selectedFigmaTags.map(tag => {
-    const info = parseFigmaTag(tag);
-    if (!info) return '';
-    return `<div class="tooltip-wrap">
-      <span class="figma-tag"><span class="fig-num">${info.label}</span><span class="fig-desc">${info.featName} v${info.ver}</span></span>
-      <div class="tooltip-box">${info.desc}</div>
-    </div>`;
-  }).join('');
+function updateConfirmTags() {
+  const el = document.getElementById('c-figma');
+  el.innerHTML = selTags.length
+    ? selTags.map(t => { const i = parseFigmaTag(t); return i ? `<div class="tip-wrap"><span class="ftag"><span>${i.label}</span><span class="ftag-desc">${i.name} v${i.ver}</span></span><div class="tip-box">${i.desc}</div></div>` : ''; }).join('')
+    : `<span style="font-size:12px;color:var(--text-3)">연결된 Figma 화면 없음</span>`;
 }
 
-function registerKey() {
-  if (!selectedKey) return;
-  if (apiConnected) {
-    showToast(`"${selectedKey}" Tolgee에 등록되었습니다`);
-  } else {
-    showToast('API 설정을 먼저 완료해주세요');
-    toggleConfig();
+// ── 등록 ──────────────────────────────────────────────────────────────────────
+async function registerKey() {
+  if (!selKey) return;
+  const btn = document.getElementById('register-btn');
+  const orig = btn.textContent;
+  btn.innerHTML = '<span class="loading-dots"><span></span><span></span><span></span></span>';
+  btn.disabled = true;
+  const api = getApi();
+  try {
+    if (api) {
+      await api.registerKey({ keyName: selKey, val: selVal, lang: 'ko', figmaTags: selTags, existingKeyId: selExistingKeyId });
+      keysCache = null; // 캐시 무효화
+      showToast(`✓ "${selKey}" Tolgee에 등록됐어요`);
+    } else {
+      showToast('⚠️ API 미설정 — 설정 패널에서 연결해주세요');
+    }
+  } catch(e) {
+    showToast(`오류: ${e.message}`);
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
   }
 }
 
 function copyKey() {
-  if (!selectedKey) return;
-  navigator.clipboard.writeText(selectedKey).then(() => showToast(`복사됨: ${selectedKey}`));
+  if (!selKey) return;
+  navigator.clipboard.writeText(selKey).then(() => showToast(`복사됨: ${selKey}`));
 }
 
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-document.getElementById('str-input').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
+document.getElementById('str-input').addEventListener('keydown', e => { if(e.key==='Enter') doSearch(); });
 </script>
 </body>
 </html>
