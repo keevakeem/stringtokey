@@ -739,21 +739,28 @@ function genKeyCandidates(scr, val) {
   var elem  = matchRule(val, keyRules.element)   || '';
   var state = matchRule(val, keyRules.state)      || '';
 
-  // 후보 1: screen.component.element (가장 기본)
-  var c1 = [scr, comp, elem].filter(Boolean).join('.');
+  var results = [];
 
-  // 후보 2: screen.component (element 없이)
-  var c2 = elem ? [scr, comp].join('.') : '';
-
-  // 후보 3: common.component.element (common 화면으로)
-  var c3 = scr !== 'common' ? ['common', comp, elem].filter(Boolean).join('.') : '';
-
-  // state가 있으면 후보 1에 state 붙인 버전도 추가
-  if (state && !elem) {
-    c2 = [scr, comp, state].join('.');
+  // 후보 1: screen.component.element (가장 구체적)
+  if (elem) {
+    results.push([scr, comp, elem].join('.'));
+  } else if (state) {
+    results.push([scr, comp, state].join('.'));
+  } else {
+    results.push([scr, comp].join('.'));
   }
 
-  return [c1, c2, c3].filter(function(k) { return k && k !== c1 || !c2; }).filter(Boolean).filter(function(k, i, arr) { return arr.indexOf(k) === i; }).slice(0, 3);
+  // 후보 2: screen.component (elem/state 없이 간결하게)
+  var c2 = [scr, comp].join('.');
+  if (results.indexOf(c2) === -1) results.push(c2);
+
+  // 후보 3: common.component.element (공통 화면 버전)
+  if (scr !== 'common') {
+    var c3 = elem ? ['common', comp, elem].join('.') : ['common', comp].join('.');
+    if (results.indexOf(c3) === -1) results.push(c3);
+  }
+
+  return results.slice(0, 3);
 }
 
 // 단일 키 생성 (fallback용)
@@ -782,16 +789,22 @@ async function doSearch(){
   try{
     let db;
     const a=getApi();
-    if(a){try{db=await getCached();}catch(e){
-      const msg=e.message||'';
-      if(msg.includes('DOCTYPE')||msg.includes('JSON')||msg.includes('Failed to fetch')){
-        showToast('CORS 오류 — Mock으로 검색');
-      } else {
-        showToast('API 오류(' + msg + ') — Mock 사용');
+    if(a){
+      try{
+        db=await getCached();
+        if(!db||db.length===0) db=MOCK_DB;
+      }catch(e){
+        const msg=e.message||'';
+        if(msg.includes('DOCTYPE')||msg.includes('JSON')||msg.includes('Failed to fetch')){
+          showToast('CORS 오류 — Mock으로 검색');
+        } else {
+          showToast('API 오류(' + msg + ') — Mock 사용');
+        }
+        db=MOCK_DB;
       }
+    } else {
       db=MOCK_DB;
-    }}
-    else db=MOCK_DB;
+    }
     const res=db.map(item=>({...item,sim:sim(val,item.val)})).filter(i=>i.sim>=thresh.sim).sort((a,b)=>b.sim-a.sim).slice(0,8);
     await renderResults(val,res,thresh);
   }finally{
