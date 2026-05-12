@@ -782,7 +782,7 @@ class TolgeeAPI {
     });
   }
 
-  async fetchAllKeys({lang='ko',pageSize=200}={}) {
+  async fetchAllKeys({lang='ko-KR',pageSize=200}={}) {
     let page=0,all=[],total=1;
     while(page<total){
       const r=await this._fetch(
@@ -801,29 +801,27 @@ class TolgeeAPI {
     return all;
   }
 
-async createKey({ keyName, translations = {}, tags = [] }) {
-  const translationsBody = {};
-  Object.entries(translations).forEach(([lang, text]) => {
-    // ❌ 기존: translationsBody[lang] = { text };
-    translationsBody[lang] = text;  // ✅ 문자열 직접
-  });
-
-  const body = {
-    name: keyName,
-    translations: translationsBody,
-    tags: tags,
-  };
-
-  const r = await this._fetch(
-    `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
-    { method: 'POST', body: JSON.stringify(body) }
-  );
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    throw new Error(JSON.stringify(e));
+  async createKey({keyName,translations={},tags=[]}) {
+    // translations 값은 문자열 직접 (객체 아님)
+    const translationsBody = {};
+    Object.entries(translations).forEach(([lang, text]) => {
+      translationsBody[lang] = text;  // ✅ 문자열 직접
+    });
+    const body = {
+      name: keyName,
+      translations: translationsBody,
+      tags: tags,  // 문자열 배열 직접
+    };
+    const r = await this._fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
+      { method: 'POST', body: JSON.stringify(body) }
+    );
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(JSON.stringify(e));
+    }
+    return r.json();
   }
-  return r.json();
-}
 
   async addTags(keyId, newTags=[]) {
     const g = await this._fetch(
@@ -841,7 +839,7 @@ async createKey({ keyName, translations = {}, tags = [] }) {
     return p.json();
   }
 
-  async registerKey({keyName,val,lang='ko',figmaTags=[],existingKeyId=null}) {
+  async registerKey({keyName,val,lang='ko-KR',figmaTags=[],existingKeyId=null}) {
     const tags=['lint:passed',...figmaTags.map(t=>`figma:${t}`)];
     if(existingKeyId){ await this.addTags(existingKeyId,tags); return{type:'tag-added',keyName}; }
     const r=await this.createKey({keyName,translations:{[lang]:val},tags});
