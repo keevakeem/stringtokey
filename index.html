@@ -809,6 +809,15 @@ async function testTolgee() {
 class TolgeeAPI{
   constructor({baseUrl,projectId,apiKey}){this.baseUrl=baseUrl.replace(/\/$/,'');this.projectId=projectId;this.apiKey=apiKey;}
   get hdr(){return{'Content-Type':'application/json','X-API-Key':this.apiKey};}
+
+  async _fetch(url, options={}) {
+    return fetch(url, {
+      credentials: 'omit',
+      ...options,
+      headers: { ...this.hdr, ...(options.headers||{}) },
+    });
+  }
+
   async fetchAllKeys({lang='ko',pageSize=200}={}){
     let page=0,all=[],total=1;
     while(page<total){
@@ -860,19 +869,18 @@ class TolgeeAPI{
     return created;
   }
 
-  async addTags(keyId,newTags=[]){
-    // 현재 키 정보 조회
-    const g = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, { headers: this.hdr });
+  async addTags(keyId, newTags=[]) {
+    const g = await this._fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`
+    );
     if (!g.ok) throw new Error('키 조회 실패: ' + g.status);
     const kd = await g.json();
     const existingTags = (kd.tags || []).map(t => t.name);
     const merged = [...new Set([...existingTags, ...newTags])];
-    // PATCH /v2/projects/{id}/keys/{keyId} 로 태그 업데이트
-    const p = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, {
-      method: 'PATCH',
-      headers: this.hdr,
-      body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }),
-    });
+    const p = await this._fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`,
+      { method: 'PATCH', body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }) }
+    );
     if (!p.ok) throw new Error('태그 업데이트 실패: ' + p.status);
     return p.json();
   }
