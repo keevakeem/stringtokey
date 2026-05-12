@@ -185,6 +185,24 @@ select{cursor:pointer}
 
 <!-- ══ 설정 ══ -->
 <div class="tab-panel" id="tab-settings">
+  <!-- Claude API Key -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="lbl" style="margin:0">Claude API</div>
+    <span class="saved-badge" id="claude-saved">저장됨</span>
+  </div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">
+    Figma 레이어 맥락을 보고 <strong>더 정확한 키를 추천</strong>해요.<br>
+    없으면 규칙 기반으로 추천돼요.
+  </div>
+  <div style="margin-bottom:8px">
+    <div class="lbl" style="margin-bottom:4px">API Key (개인)</div>
+    <input type="password" id="claude-key" placeholder="sk-ant-..." style="font-family:var(--mono);font-size:11px">
+  </div>
+  <div style="margin-bottom:14px">
+    <button class="btn-p" style="width:auto;padding:8px 16px;font-size:12px" onclick="saveClaudeKey()">저장</button>
+  </div>
+  <div class="divider"></div>
+
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="lbl" style="margin:0">Tolgee 연결</div>
     <span class="saved-badge" id="tolgee-saved">저장됨</span>
@@ -406,6 +424,7 @@ let keyRules = {
 let screenList = ['common','onboarding','home','profile','settings','payment','search'];
 let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:''};
 let selectedFrames = [];
+let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
 let cardTags = {};
 let selKey=null,selVal=null,selTags=[],selExistingKeyId=null;
 let _api=null,_cache=null,_cacheTime=0;
@@ -503,12 +522,15 @@ function applySelection(msg) {
   const hint = document.getElementById('hint-box');
   if (texts.length === 1) {
     document.getElementById('str-input').value = texts[0].characters;
-    document.getElementById('hint-text').textContent = `"${texts[0].characters}"`;
+    document.getElementById('hint-text').textContent = '"' + texts[0].characters + '"';
     const fn = texts[0].frameName;
-    document.getElementById('hint-frame').textContent = fn ? `📱 프레임: ${fn}` : '';
+    document.getElementById('hint-frame').textContent = fn ? '📱 프레임: ' + fn : '';
     hint.style.display = 'block';
+    // 맥락 저장 (Claude 추천에 활용)
+    layerContext = texts[0].context || null;
   } else {
     hint.style.display = 'none';
+    layerContext = null;
   }
 }
 
@@ -596,6 +618,13 @@ function saveClaudeKey() {
   const key = document.getElementById('claude-key').value.trim();
   try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
   // 코드에서 직접 사용할 수 있도록 전역 업데이트
+  showBadge('claude-saved');
+  showToast('Claude API Key가 저장됐어요');
+}
+
+function saveClaudeKey() {
+  var key = document.getElementById('claude-key').value.trim();
+  try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
   showBadge('claude-saved');
   showToast('Claude API Key가 저장됐어요');
 }
@@ -706,18 +735,87 @@ async function getCached(){
 // ── 유사도 ────────────────────────────────────────────────────────────────────
 function lev(a,b){const m=a.length,n=b.length,dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);return dp[m][n];}
 function sim(a,b){if(a===b)return 100;const mx=Math.max(a.length,b.length);return mx===0?100:Math.round((1-lev(a,b)/mx)*100);}
-// ── 규칙 기반 키 추천 (config.json의 keyRules 사용) ─────────────────────────
+// ── 키 추천: Claude API (맥락 있을 때) + 규칙 기반 (fallback) ───────────────
 async function recommendKeysWithClaude(screen, val, existingKeys) {
-  // Claude API 대신 규칙 기반으로 후보 생성
-  var candidates = genKeyCandidates(screen, val);
+  var apiKey = '';
+  try { apiKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
 
-  // 기존 키 목록과 중복 체크 — 이미 있는 키면 표시
-  candidates = candidates.map(function(k) {
+  var ruleCandidates = genKeyCandidates(screen, val);
+
+  // Claude API Key 없으면 규칙 기반으로
+  if (!apiKey) return withDupeCheck(ruleCandidates, existingKeys);
+
+  // 맥락 정보 구성
+  var contextLines = [];
+  if (layerContext) {
+    if (layerContext.componentName) contextLines.push('Component: ' + layerContext.componentName);
+    if (layerContext.parents && layerContext.parents.length) contextLines.push('Parent layers: ' + layerContext.parents.join(' > '));
+    if (layerContext.siblings && layerContext.siblings.length) contextLines.push('Sibling texts: ' + layerContext.siblings.join(', '));
+  }
+  var contextStr = contextLines.length ? contextLines.join(' | ') : '(no layer context)';
+
+  var keyExamples = existingKeys.slice(0, 30).map(function(k) { return k.key; }).join(', ');
+  var ruleSuggestions = ruleCandidates.join(', ');
+
+  var prompt = [
+    'You are an i18n key naming expert. Suggest 3 key names based on the rules and context.',
+    '',
+    'Key rules:',
+    '- Format: {screen}.{section?}.{component}.{element?}.{state?}',
+    '- snake_case, dot separator',
+    '- component: btn, label, input, toast, modal, tab',
+    '- element: cta, save, cancel, confirm, delete, placeholder, title, description',
+    '- state: error, empty, loading, success',
+    '',
+    'Current screen: ' + screen,
+    'String: "' + val + '"',
+    'Figma layer context:',
+    contextStr,
+    '',
+    'Rule-based suggestions (use as reference): ' + ruleSuggestions,
+    '',
+    'Existing keys (for consistency):',
+    keyExamples,
+    '',
+    'Return ONLY a JSON array of exactly 3 key strings. No explanation.',
+    'Example: ["onboarding.name_input.btn.cta", "onboarding.btn.next", "common.btn.cta"]',
+  ].join(' ');
+
+  try {
+    var res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error('Claude API ' + res.status);
+    var data = await res.json();
+    var text = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
+    var match = text.match(/\[[\s\S]*?\]/);
+    if (!match) throw new Error('parse error');
+    var keys = JSON.parse(match[0]);
+    if (!Array.isArray(keys) || keys.length === 0) throw new Error('empty result');
+    return withDupeCheck(keys.slice(0, 3), existingKeys);
+  } catch(e) {
+    console.warn('Claude 추천 실패, 규칙 기반 사용:', e.message);
+    return withDupeCheck(ruleCandidates, existingKeys);
+  }
+}
+
+// 중복 키 체크 후 표시
+function withDupeCheck(candidates, existingKeys) {
+  return candidates.map(function(k) {
     var exists = existingKeys.some(function(item) { return item.key === k; });
     return exists ? k + '  ⚠️ 이미 존재' : k;
   });
-
-  return candidates;
 }
 
 // 문자열에서 키워드 매칭으로 세그먼트 찾기
@@ -1067,7 +1165,12 @@ async function initApp() {
     document.getElementById('cfg-key').value     = savedApiKey;
     if (savedApiKey) _api = null;
 
-    // 3) GitHub 설정 불러오기 (token만 localStorage, 나머지는 config.json에서 이미 세팅됨)
+    // 3) Claude API Key 불러오기
+    var claudeKey = '';
+    try { claudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
+    if (claudeKey) document.getElementById('claude-key').value = claudeKey;
+
+    // 4) GitHub 설정 불러오기 (token만 localStorage, 나머지는 config.json에서 이미 세팅됨)
     const gh = getGithubConfig();
     if (gh.token)  document.getElementById('gh-token').value  = gh.token;
     document.getElementById('gh-owner').value  = gh.owner  || '';
