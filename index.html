@@ -802,11 +802,8 @@ class TolgeeAPI {
   }
 
   async createKey({keyName, translations={}, tags=[]}) {
-    // 1단계: 키만 먼저 생성 (translations 없이)
-    const body = {
-      name: keyName,
-      tags: tags,
-    };
+    // 1단계: 키만 먼저 생성
+    const body = { name: keyName, tags: tags };
     const r = await this._fetch(
       `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
       { method: 'POST', body: JSON.stringify(body) }
@@ -817,17 +814,21 @@ class TolgeeAPI {
     }
     const created = await r.json();
 
-    // 2단계: 번역 따로 등록 (PUT /v2/projects/:id/translations)
+    // 2단계: 번역 등록 PUT /v2/projects/:id/translations
     const langEntries = Object.entries(translations);
-    if (langEntries.length > 0 && created.id) {
+    if (langEntries.length > 0) {
       const transBody = { key: keyName, translations: {} };
       langEntries.forEach(([lang, text]) => {
-        transBody.translations[lang] = text;
+        transBody.translations[lang] = { text };
       });
-      await this._fetch(
+      const tr = await this._fetch(
         `${this.baseUrl}/v2/projects/${this.projectId}/translations`,
-        { method: 'POST', body: JSON.stringify(transBody) }
+        { method: 'PUT', body: JSON.stringify(transBody) }
       );
+      if (!tr.ok) {
+        const e = await tr.json().catch(() => ({}));
+        console.warn('번역 등록 실패:', JSON.stringify(e));
+      }
     }
     return created;
   }
