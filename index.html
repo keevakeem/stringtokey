@@ -111,6 +111,16 @@ select{cursor:pointer}
 .ld span{width:3px;height:3px;background:#fff;border-radius:50%;animation:d .8s infinite}
 .ld span:nth-child(2){animation-delay:.15s}.ld span:nth-child(3){animation-delay:.3s}
 @keyframes d{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.bulk-item{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:7px}
+.bulk-item.done{opacity:.5;border-color:var(--green-bd)}
+.bulk-item .val{font-size:13px;color:var(--text);margin-bottom:5px;font-weight:500}
+.bulk-item .key-row{display:flex;align-items:center;gap:6px}
+.bulk-item .key-edit{font-family:var(--mono);font-size:11px;flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none}
+.bulk-item .key-edit:focus{border-color:var(--border-strong)}
+.bulk-item .reg-btn{font-size:11px;padding:5px 10px;border-radius:6px;border:none;background:var(--text);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.bulk-item .reg-btn:disabled{opacity:.4;cursor:not-allowed}
+.bulk-item .done-mark{font-size:11px;color:var(--green);font-family:var(--mono)}
+.mode-active{background:var(--text)!important;color:#fff!important;border-color:var(--text)!important}
 </style>
 </head>
 <body>
@@ -124,11 +134,19 @@ select{cursor:pointer}
 
 <!-- ══ 문자열 키 ══ -->
 <div class="tab-panel active" id="tab-keys">
-  <div class="hint-box" id="hint-box">
-    <strong id="hint-text"></strong>
-    <span id="hint-frame"></span>
+  <!-- 모드 전환 -->
+  <div style="display:flex;gap:6px;margin-bottom:12px">
+    <button id="mode-single" class="btn-p" style="flex:1;padding:7px;font-size:12px" onclick="setMode('single')">단일 검색</button>
+    <button id="mode-bulk" class="btn-s" style="flex:1;padding:7px;font-size:12px" onclick="setMode('bulk')">프레임 일괄</button>
   </div>
-  <div class="lbl">화면</div>
+
+  <!-- 단일 검색 영역 -->
+  <div id="single-area">
+    <div class="hint-box" id="hint-box">
+      <strong id="hint-text"></strong>
+      <span id="hint-frame"></span>
+    </div>
+    <div class="lbl">화면</div>
   <div style="margin-bottom:10px"><select id="screen-sel"></select></div>
   <div class="lbl">문자열</div>
   <div class="row"><input type="text" id="str-input" placeholder="문자열 입력 (예: 다음으로)"></div>
@@ -150,8 +168,8 @@ select{cursor:pointer}
     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     유사 문자열 검색
   </button>
-  <div id="key-results" style="margin-top:10px"></div>
-  <div class="confirm-box" id="confirm-box">
+    <div id="key-results" style="margin-top:10px"></div>
+    <div class="confirm-box" id="confirm-box">
     <div class="lbl" style="margin-bottom:7px">선택된 키</div>
     <div class="key-mono" id="c-key"></div>
     <div class="val-t" id="c-val"></div>
@@ -160,6 +178,20 @@ select{cursor:pointer}
       <button class="btn-p" onclick="regKey()">Tolgee 등록</button>
       <button class="btn-s" onclick="cpKey()">키 복사</button>
     </div>
+  </div>
+  </div><!-- /single-area -->
+
+  <!-- 일괄 처리 영역 -->
+  <div id="bulk-area" style="display:none">
+    <div class="info-box" style="margin-bottom:10px;font-size:11px">
+      선택한 프레임에서 <strong id="bulk-count">0</strong>개의 문자열을 찾았어요.<br>
+      키를 확인하고 일괄 등록하세요.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn-p" style="flex:1;padding:8px;font-size:12px" onclick="registerAll()">전체 등록</button>
+      <button class="btn-s" style="flex:1;padding:8px;font-size:12px" onclick="refreshBulk()">키 재추천</button>
+    </div>
+    <div id="bulk-list"></div>
   </div>
 </div>
 
@@ -425,6 +457,8 @@ let screenList = ['common','onboarding','home','profile','settings','payment','s
 let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:''};
 let selectedFrames = [];
 let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
+let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
+let bulkMode = false;   // 일괄 모드 여부
 let cardTags = {};
 let selKey=null,selVal=null,selTags=[],selExistingKeyId=null;
 let _api=null,_cache=null,_cacheTime=0;
@@ -532,9 +566,120 @@ function applySelection(msg) {
     hint.style.display = 'none';
     layerContext = null;
   }
+
+  // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
+  bulkTexts = msg.bulkTexts || [];
+  document.getElementById('bulk-count').textContent = bulkTexts.length;
+  if (bulkTexts.length > 0 && bulkMode) {
+    renderBulkList();
+  }
+  // 프레임이 선택됐고 bulk 텍스트가 있으면 일괄 모드 알림
+  if (bulkTexts.length > 0 && !bulkMode) {
+    showToast(bulkTexts.length + '개 문자열 감지 — 프레임 일괄 탭을 확인해보세요');
+  }
 }
 
 // ── 탭 ───────────────────────────────────────────────────────────────────────
+// ── 모드 전환 ────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  bulkMode = mode === 'bulk';
+  document.getElementById('single-area').style.display = bulkMode ? 'none' : 'block';
+  document.getElementById('bulk-area').style.display   = bulkMode ? 'block' : 'none';
+  document.getElementById('mode-single').className = bulkMode ? 'btn-s' : 'btn-p';
+  document.getElementById('mode-bulk').className   = bulkMode ? 'btn-p' : 'btn-s';
+  if (bulkMode) renderBulkList();
+}
+
+// ── 일괄 목록 렌더 ────────────────────────────────────────────────────────────
+async function renderBulkList() {
+  var list = document.getElementById('bulk-list');
+  if (!bulkTexts.length) {
+    list.innerHTML = '<div class="empty">Figma에서 프레임을 선택해주세요.</div>';
+    return;
+  }
+  // 로딩 표시
+  list.innerHTML = '<div class="empty"><span class="ld"><span></span><span></span><span></span></span> 키 추천 중...</div>';
+
+  var existingKeys = [];
+  try { existingKeys = (await getCached()) || MOCK_DB; } catch(e) { existingKeys = MOCK_DB; }
+
+  var html = '';
+  var scr = document.getElementById('screen-sel').value;
+
+  // 각 문자열에 대해 키 추천
+  var items = [];
+  for (var i = 0; i < bulkTexts.length; i++) {
+    var t = bulkTexts[i];
+    // layerContext를 각 텍스트의 context로 설정
+    layerContext = t.context || null;
+    var candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
+    var suggestedKey = candidates[0] ? candidates[0].replace('  ⚠️ 이미 존재', '') : genKey(scr, t.characters);
+    items.push({ text: t.characters, key: suggestedKey, idx: i });
+  }
+  layerContext = null;
+
+  list.innerHTML = '';
+  items.forEach(function(item) {
+    var div = document.createElement('div');
+    div.className = 'bulk-item';
+    div.id = 'bulk-item-' + item.idx;
+    div.innerHTML = [
+      '<div class="val">' + item.text + '</div>',
+      '<div class="key-row">',
+        '<input class="key-edit" id="bulk-key-' + item.idx + '" value="' + item.key + '">',
+        '<button class="reg-btn" onclick="registerBulkItem(' + item.idx + ')">등록</button>',
+        '<span class="done-mark" id="bulk-done-' + item.idx + '" style="display:none">✓</span>',
+      '</div>',
+    ].join('');
+    list.appendChild(div);
+  });
+}
+
+// ── 개별 등록 ─────────────────────────────────────────────────────────────────
+async function registerBulkItem(idx) {
+  var keyEl = document.getElementById('bulk-key-' + idx);
+  var itemEl = document.getElementById('bulk-item-' + idx);
+  var doneEl = document.getElementById('bulk-done-' + idx);
+  var btnEl = itemEl.querySelector('.reg-btn');
+  if (!keyEl || !keyEl.value.trim()) { showToast('키를 입력해주세요'); return; }
+
+  btnEl.disabled = true;
+  btnEl.textContent = '...';
+  var api = getApi();
+  try {
+    if (api) {
+      await api.registerKey({ keyName: keyEl.value.trim(), val: bulkTexts[idx].characters, lang: 'ko', figmaTags: [], existingKeyId: null });
+      _cache = null;
+    }
+    itemEl.classList.add('done');
+    btnEl.style.display = 'none';
+    doneEl.style.display = 'inline';
+    showToast('✓ ' + keyEl.value.trim() + ' 등록됨');
+  } catch(e) {
+    showToast('오류: ' + e.message);
+    btnEl.disabled = false;
+    btnEl.textContent = '등록';
+  }
+}
+
+// ── 전체 등록 ─────────────────────────────────────────────────────────────────
+async function registerAll() {
+  var items = document.querySelectorAll('.bulk-item:not(.done)');
+  if (!items.length) { showToast('등록할 항목이 없어요'); return; }
+  for (var i = 0; i < bulkTexts.length; i++) {
+    var itemEl = document.getElementById('bulk-item-' + i);
+    if (itemEl && !itemEl.classList.contains('done')) {
+      await registerBulkItem(i);
+      await new Promise(function(r) { setTimeout(r, 300); }); // 연속 요청 방지
+    }
+  }
+}
+
+// ── 키 재추천 ─────────────────────────────────────────────────────────────────
+async function refreshBulk() {
+  await renderBulkList();
+}
+
 function sw(t) {
   document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['keys','rename','settings'][i]===t));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
