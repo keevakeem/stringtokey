@@ -121,6 +121,13 @@ select{cursor:pointer}
 .bulk-item .reg-btn:disabled{opacity:.4;cursor:not-allowed}
 .bulk-item .done-mark{font-size:11px;color:var(--green);font-family:var(--mono)}
 .mode-active{background:var(--text)!important;color:#fff!important;border-color:var(--text)!important}
+.rep-item{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:5px;font-size:12px}
+.rep-item .rep-from{color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-item .rep-arrow{color:var(--text-3);flex-shrink:0}
+.rep-item .rep-to{color:var(--text);flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-item.no-match{opacity:.4}
+.rep-item .rep-badge{font-size:10px;padding:1px 6px;border-radius:20px;background:var(--green-bg);color:var(--green);flex-shrink:0}
+.rep-item.no-match .rep-badge{background:var(--bg);color:var(--text-3)}
 </style>
 </head>
 <body>
@@ -128,6 +135,7 @@ select{cursor:pointer}
 <div class="plugin-wrap">
 <div class="tabs">
   <button class="tab active" onclick="sw('keys')">🔑 문자열 키</button>
+  <button class="tab" onclick="sw('replace')">🌐 언어 교체</button>
   <button class="tab" onclick="sw('rename')">✏️ 프레임 이름</button>
   <button class="tab" onclick="sw('settings')">⚙️ 설정</button>
 </div>
@@ -174,6 +182,10 @@ select{cursor:pointer}
     <div class="key-mono" id="c-key"></div>
     <div class="val-t" id="c-val"></div>
     <div class="ftags" id="c-tags" style="margin-bottom:8px"></div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="rename-layer-chk" checked style="accent-color:var(--text)">
+      등록 후 레이어 이름을 키값으로 변경
+    </label>
     <div class="ac-row">
       <button class="btn-p" onclick="regKey()">Tolgee 등록</button>
       <button class="btn-s" onclick="cpKey()">키 복사</button>
@@ -192,6 +204,32 @@ select{cursor:pointer}
       <button class="btn-s" style="flex:1;padding:8px;font-size:12px" onclick="refreshBulk()">키 재추천</button>
     </div>
     <div id="bulk-list"></div>
+  </div>
+</div>
+
+<!-- ══ 언어 교체 ══ -->
+<div class="tab-panel" id="tab-replace">
+  <div class="info-box">
+    선택한 프레임의 텍스트를 <strong>다른 언어 번역값</strong>으로 일괄 교체해요.<br>
+    텍스트 내용이 Tolgee의 기본 언어(<span id="base-lang-label">ko-KR</span>) 값과 일치하면 교체돼요.
+  </div>
+
+  <div class="lbl">교체할 언어</div>
+  <div style="margin-bottom:12px">
+    <select id="replace-lang-sel"></select>
+  </div>
+
+  <div id="replace-no-sel" class="no-sel">Figma 캔버스에서<br>프레임을 선택해주세요</div>
+
+  <div id="replace-content" style="display:none">
+    <button class="btn-p" id="preview-btn" onclick="previewReplace()" style="margin-bottom:8px">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      교체 미리보기
+    </button>
+    <div id="replace-preview" style="margin-bottom:10px"></div>
+    <button class="btn-p" id="replace-btn" onclick="doReplace()" style="display:none">
+      ✓ 교체 적용
+    </button>
   </div>
 </div>
 
@@ -457,6 +495,7 @@ let screenList = ['common','onboarding','home','profile','settings','payment','s
 let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',langs:['ko-KR','en','ja']};
 let selectedFrames = [];
 let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
+let currentTextNodeId = null; // 현재 선택된 텍스트 레이어 ID (레이어 이름 변경용)
 let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
 let bulkMode = false;   // 일괄 모드 여부
 let cardTags = {};
@@ -515,7 +554,7 @@ function handleFigmaMsg(msg) {
         document.getElementById('cfg-key').value     = savedKey;
         if (savedKey) _api = null;
       });
-      renderScreenSelect(); renderScreenList(); renderFeatMap();
+      renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
       applySelection(msg);
       break;
     case 'selection-changed':
@@ -526,11 +565,19 @@ function handleFigmaMsg(msg) {
       if (msg.key === 'tolgeeConfig') showBadge('tolgee-saved');
       if (msg.key === 'storage') { /* 범용 저장 완료 */ }
       break;
+    case 'replace-done':
+      document.getElementById('replace-btn').textContent = msg.replaced + '개 교체 완료';
+      document.getElementById('replace-btn').disabled = false;
+      showToast('✓ ' + msg.replaced + '개 텍스트 교체됐어요');
+      break;
     case 'rename-done':
       document.getElementById('rename-list').innerHTML =
         msg.renamed.map(r=>`<div class="frame-item"><span class="frame-num">✓</span><span class="frame-new">${r.newName}</span></div>`).join('');
       document.getElementById('rename-result').style.display='block';
       showToast(`${msg.renamed.length}개 프레임 이름 변경 완료`);
+      break;
+    case 'layer-renamed':
+      showToast('레이어명 → ' + msg.keyName);
       break;
     case 'error':
       showToast(msg.message);
@@ -551,6 +598,11 @@ function applySelection(msg) {
   document.getElementById('no-sel').style.display = hasSel ? 'none' : 'block';
   document.getElementById('rename-content').style.display = hasSel ? 'block' : 'none';
   if (hasSel) renderPreview();
+  // 언어 교체 탭 프레임 감지
+  document.getElementById('replace-no-sel').style.display = hasSel ? 'none' : 'block';
+  document.getElementById('replace-content').style.display = hasSel ? 'block' : 'none';
+  document.getElementById('replace-preview').innerHTML = '';
+  document.getElementById('replace-btn').style.display = 'none';
 
   // 텍스트 노드 힌트 (문자열 키 탭)
   const texts = msg.texts || [];
@@ -563,9 +615,11 @@ function applySelection(msg) {
     hint.style.display = 'block';
     // 맥락 저장 (Claude 추천에 활용)
     layerContext = texts[0].context || null;
+    currentTextNodeId = texts[0].id || null;
   } else {
     hint.style.display = 'none';
     layerContext = null;
+    currentTextNodeId = null;
   }
 
   // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
@@ -687,7 +741,7 @@ async function refreshBulk() {
 }
 
 function sw(t) {
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['keys','rename','settings'][i]===t));
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['keys','replace','rename','settings'][i]===t));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
 }
@@ -1266,10 +1320,16 @@ async function regKey(){
   try{
     if(a){
       await a.registerKey({keyName:selKey,val:selVal,figmaTags:selTags,existingKeyId:selExistingKeyId});
-      _cache=null;showToast(`✓ "${selKey}" Tolgee에 등록됐어요`);
-      toFigma({type:'notify',message:`키 등록: ${selKey}`});
+      _cache=null;
+      showToast('✓ "' + selKey + '" Tolgee에 등록됐어요');
+      // 선택된 텍스트 레이어 이름을 키값으로 변경 (체크박스 확인)
+      const renameChk = document.getElementById('rename-layer-chk');
+      if(IS_FIGMA && currentTextNodeId && renameChk && renameChk.checked) {
+        toFigma({ type: 'rename-layer', nodeId: currentTextNodeId, keyName: selKey });
+      }
+      toFigma({type:'notify',message:'키 등록: ' + selKey});
     }else{showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요');}
-  }catch(e){showToast(`오류: ${e.message}`);}
+  }catch(e){showToast('오류: ' + e.message);}
   finally{btn.textContent=orig;btn.disabled=false;}
 }
 function cpKey(){
@@ -1310,6 +1370,108 @@ document.getElementById('feat-num').addEventListener('input',renderPreview);
 document.getElementById('feat-ver').addEventListener('input',renderPreview);
 
 // ── 초기 렌더 (Figma 없이 브라우저에서 직접 열 때도 동작) ───────────────────
+// ── 언어 교체 탭 ─────────────────────────────────────────────────────────────
+
+function renderReplaceLangSelect() {
+  const sel = document.getElementById('replace-lang-sel');
+  const langs = tolgeeConfig.langs && tolgeeConfig.langs.length ? tolgeeConfig.langs : ['ko-KR'];
+  const baseLang = langs[0];
+  // 기본 언어 제외한 나머지 언어만 선택지로
+  const targets = langs.filter(function(l) { return l !== baseLang; });
+  sel.innerHTML = targets.map(function(l) {
+    return '<option value="' + l + '">' + l + '</option>';
+  }).join('');
+  document.getElementById('base-lang-label').textContent = baseLang;
+}
+
+let replaceMap = []; // { nodeId, fromText, toText }
+
+async function previewReplace() {
+  const btn = document.getElementById('preview-btn');
+  const origText = btn.innerHTML;
+  btn.innerHTML = '<span class="ld"><span></span><span></span><span></span></span>';
+  btn.disabled = true;
+  document.getElementById('replace-btn').style.display = 'none';
+  document.getElementById('replace-preview').innerHTML = '';
+  replaceMap = [];
+
+  try {
+    // 1. Tolgee에서 전체 키 번역 fetch
+    const api = getApi();
+    if (!api) { showToast('Tolgee API 설정을 먼저 해주세요'); return; }
+
+    const langs = tolgeeConfig.langs && tolgeeConfig.langs.length ? tolgeeConfig.langs : ['ko-KR'];
+    const baseLang = langs[0];
+    const targetLang = document.getElementById('replace-lang-sel').value;
+    if (!targetLang) { showToast('교체할 언어를 선택해주세요'); return; }
+
+    // 기본 언어와 타겟 언어 둘 다 fetch
+    const [baseKeys, targetKeys] = await Promise.all([
+      api.fetchAllKeys({ lang: baseLang }),
+      api.fetchAllKeys({ lang: targetLang }),
+    ]);
+
+    // baseKeys는 참고용 (현재는 레이어 이름 = 키값 방식으로 매칭)
+
+    // 2. 선택한 프레임의 모든 텍스트와 매칭 (레이어 이름 = 키값 기준)
+    const preview = document.getElementById('replace-preview');
+    let matchCount = 0;
+
+    // targetKeys를 keyName → val 맵으로 변환
+    const keyToTarget = {};
+    targetKeys.forEach(function(item) { if (item.val) keyToTarget[item.key] = item.val; });
+
+    bulkTexts.forEach(function(t) {
+      // 레이어 이름이 키값 형식인지 확인 (점으로 구분된 snake_case)
+      const layerName = t.name || '';
+      const isKeyFormat = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(layerName);
+      const toText = isKeyFormat ? keyToTarget[layerName] : null;
+      const hasMatch = !!toText && toText !== t.characters;
+
+      if (hasMatch) {
+        replaceMap.push({ nodeId: t.id, fromText: t.characters, newText: toText });
+        matchCount++;
+      }
+
+      const div = document.createElement('div');
+      div.className = 'rep-item' + (hasMatch ? '' : ' no-match');
+      div.innerHTML = [
+        '<div style="flex:1;min-width:0">',
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--text-3);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (layerName || '(레이어명 없음)') + '</div>',
+          '<div style="display:flex;align-items:center;gap:6px">',
+            '<span class="rep-from">' + t.characters + '</span>',
+            '<span class="rep-arrow">→</span>',
+            '<span class="rep-to">' + (toText || (isKeyFormat ? '번역 없음' : '키 형식 아님')) + '</span>',
+          '</div>',
+        '</div>',
+        '<span class="rep-badge">' + (hasMatch ? '교체' : '스킵') + '</span>',
+      ].join('');
+      preview.appendChild(div);
+    });
+
+    if (matchCount > 0) {
+      document.getElementById('replace-btn').style.display = 'flex';
+      document.getElementById('replace-btn').textContent = matchCount + '개 교체 적용';
+    } else {
+      showToast('교체할 수 있는 텍스트가 없어요');
+    }
+
+  } catch(e) {
+    showToast('오류: ' + e.message);
+  } finally {
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  }
+}
+
+function doReplace() {
+  if (!replaceMap.length) return;
+  const btn = document.getElementById('replace-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ld"><span></span><span></span><span></span></span>';
+  toFigma({ type: 'replace-texts', replacements: replaceMap });
+}
+
 async function initApp() {
   if (!IS_FIGMA) {
     // 1) config.json에서 공유 설정 불러오기 (팀 공통)
@@ -1354,7 +1516,7 @@ async function initApp() {
     document.getElementById('gh-repo').value   = gh.repo   || '';
     document.getElementById('gh-branch').value = gh.branch || 'main';
   }
-  renderScreenSelect(); renderScreenList(); renderFeatMap();
+  renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
 }
 initApp();
 </script>
