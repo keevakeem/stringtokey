@@ -1,0 +1,18 @@
+{
+  "featureMap": {
+    "1": "회원가입",
+    "2": "홈 피드",
+    "3": "온보딩",
+    "4": "프로필",
+    "5": "결제"
+  },
+  "screenList": [
+    "common",
+    "onboarding",
+    "home",
+    "profile",
+    "settings",
+    "payment",
+    "search"
+  ]
+}

@@ -198,6 +198,32 @@ select{cursor:pointer}
     <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="testTolgee()">연결 테스트</button>
   </div>
   <div class="divider"></div>
+
+  <!-- GitHub 설정 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="lbl" style="margin:0">GitHub 설정</div>
+    <span class="saved-badge" id="gh-saved">저장됨</span>
+  </div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">
+    화면 목록·기능 매핑을 <strong>config.json</strong>으로 팀 공유해요.<br>
+    토큰은 이 기기 브라우저에만 저장돼요.
+  </div>
+  <div style="margin-bottom:7px"><div class="lbl" style="margin-bottom:4px">Personal Access Token</div>
+    <input type="password" id="gh-token" placeholder="ghp_..." style="font-family:var(--mono);font-size:11px">
+  </div>
+  <div class="row" style="margin-bottom:7px">
+    <div><div class="lbl" style="margin-bottom:4px">Owner (username/org)</div><input type="text" id="gh-owner" placeholder="kakaohealth"></div>
+    <div><div class="lbl" style="margin-bottom:4px">Repo</div><input type="text" id="gh-repo" placeholder="string-key-tool"></div>
+  </div>
+  <div style="margin-bottom:7px"><div class="lbl" style="margin-bottom:4px">Branch</div>
+    <input type="text" id="gh-branch" placeholder="main" style="max-width:120px">
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveGithubSettings()">저장</button>
+    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="syncFromGithub()">지금 동기화</button>
+  </div>
+
+  <div class="divider"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="lbl" style="margin:0">화면 목록</div>
     <span class="saved-badge" id="screen-saved">저장됨</span>
@@ -245,6 +271,87 @@ function storageLoad(key, fallback) {
     const v = localStorage.getItem('skt_' + key);
     return v ? JSON.parse(v) : fallback;
   } catch(e) { return fallback; }
+}
+
+// ── GitHub config.json 연동 ───────────────────────────────────────────────────
+// 토큰은 localStorage에만 보관 (코드에 절대 하드코딩 X)
+function getGithubConfig() {
+  try {
+    return {
+      token:  localStorage.getItem('skt_gh_token')  || '',
+      owner:  localStorage.getItem('skt_gh_owner')  || '',
+      repo:   localStorage.getItem('skt_gh_repo')   || '',
+      branch: localStorage.getItem('skt_gh_branch') || 'main',
+    };
+  } catch(e) { return {}; }
+}
+
+function saveGithubConfig(token, owner, repo, branch) {
+  try {
+    localStorage.setItem('skt_gh_token',  token);
+    localStorage.setItem('skt_gh_owner',  owner);
+    localStorage.setItem('skt_gh_repo',   repo);
+    localStorage.setItem('skt_gh_branch', branch||'main');
+  } catch(e) {}
+}
+
+// config.json을 GitHub Pages에서 fetch (캐시 무시)
+async function fetchRemoteConfig() {
+  try {
+    const res = await fetch('./config.json?t=' + Date.now());
+    if (!res.ok) throw new Error('fetch failed');
+    return await res.json();
+  } catch(e) {
+    console.warn('config.json 불러오기 실패:', e.message);
+    return null;
+  }
+}
+
+// config.json을 GitHub API로 업데이트
+async function pushConfigToGithub(data) {
+  const gh = getGithubConfig();
+  if (!gh.token || !gh.owner || !gh.repo) {
+    showToast('⚠️ GitHub 설정을 먼저 입력해주세요');
+    return false;
+  }
+  const path = 'config.json';
+  const apiBase = `https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${path}`;
+
+  // 현재 파일의 SHA 가져오기 (업데이트에 필요)
+  let sha = '';
+  try {
+    const getRes = await fetch(apiBase, {
+      headers: { 'Authorization': 'token ' + gh.token, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (getRes.ok) { const d = await getRes.json(); sha = d.sha || ''; }
+  } catch(e) {}
+
+  const body = {
+    message: 'chore: update config.json',
+    content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))),
+    branch:  gh.branch || 'main',
+  };
+  if (sha) body.sha = sha;
+
+  try {
+    const putRes = await fetch(apiBase, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'token ' + gh.token,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!putRes.ok) {
+      const e = await putRes.json().catch(() => ({}));
+      throw new Error(e.message || putRes.status);
+    }
+    return true;
+  } catch(e) {
+    showToast('GitHub 저장 실패: ' + e.message);
+    return false;
+  }
 }
 
 let featureMap = {'1':'회원가입','2':'홈 피드','3':'온보딩','4':'프로필','5':'결제'};
@@ -388,13 +495,39 @@ function addFeat() {
 function rmFeat(k) { delete featureMap[k]; renderFeatMap(); saveFeatureMap(); }
 
 // clientStorage 저장 (code.js 경유)
-function saveFeatureMap() {
+async function saveFeatureMap() {
   storageSave('featureMap', featureMap);
   storageSave('screenList', screenList);
   if (IS_FIGMA) toFigma({ type:'save-feature-map', featureMap, screenList });
+  // config.json 동기화
+  const ok = await pushConfigToGithub({ featureMap, screenList });
+  if (ok) showToast('✓ config.json 저장됨');
 }
 
 // ── Tolgee 설정 ───────────────────────────────────────────────────────────────
+function saveGithubSettings() {
+  const token  = document.getElementById('gh-token').value.trim();
+  const owner  = document.getElementById('gh-owner').value.trim();
+  const repo   = document.getElementById('gh-repo').value.trim();
+  const branch = document.getElementById('gh-branch').value.trim() || 'main';
+  saveGithubConfig(token, owner, repo, branch);
+  showBadge('gh-saved');
+  showToast('GitHub 설정이 저장됐어요');
+}
+
+async function syncFromGithub() {
+  showToast('config.json 불러오는 중...');
+  const remote = await fetchRemoteConfig();
+  if (remote) {
+    if (remote.featureMap) featureMap = remote.featureMap;
+    if (remote.screenList) screenList = remote.screenList;
+    renderScreenSelect(); renderScreenList(); renderFeatMap();
+    showToast('✓ 동기화 완료');
+  } else {
+    showToast('✗ config.json 불러오기 실패');
+  }
+}
+
 function saveTolgee() {
   tolgeeConfig={url:document.getElementById('cfg-url').value.trim(),projectId:document.getElementById('cfg-project').value.trim(),apiKey:document.getElementById('cfg-key').value.trim()};
   _api=null;_cache=null;_cacheTime=0;
@@ -658,17 +791,35 @@ document.getElementById('feat-num').addEventListener('input',renderPreview);
 document.getElementById('feat-ver').addEventListener('input',renderPreview);
 
 // ── 초기 렌더 (Figma 없이 브라우저에서 직접 열 때도 동작) ───────────────────
-if (!IS_FIGMA) {
-  // 브라우저 직접 접근 시 localStorage에서 불러오기
-  featureMap  = storageLoad('featureMap',  featureMap);
-  screenList  = storageLoad('screenList',  screenList);
-  tolgeeConfig = storageLoad('tolgeeConfig', tolgeeConfig);
-  if (tolgeeConfig.url)     document.getElementById('cfg-url').value     = tolgeeConfig.url;
-  if (tolgeeConfig.projectId) document.getElementById('cfg-project').value = tolgeeConfig.projectId;
-  if (tolgeeConfig.apiKey)  document.getElementById('cfg-key').value     = tolgeeConfig.apiKey;
-  if (tolgeeConfig.apiKey) _api = null; // 다음 검색 시 재생성
+async function initApp() {
+  if (!IS_FIGMA) {
+    // 1) config.json에서 공유 설정 불러오기 (팀 공통)
+    const remote = await fetchRemoteConfig();
+    if (remote) {
+      if (remote.featureMap) featureMap = remote.featureMap;
+      if (remote.screenList) screenList = remote.screenList;
+    } else {
+      // config.json 실패 시 localStorage 폴백
+      featureMap  = storageLoad('featureMap',  featureMap);
+      screenList  = storageLoad('screenList',  screenList);
+    }
+    // 2) 개인 설정 (tolgee, github token)은 localStorage
+    tolgeeConfig = storageLoad('tolgeeConfig', tolgeeConfig);
+    if (tolgeeConfig.url)       document.getElementById('cfg-url').value     = tolgeeConfig.url;
+    if (tolgeeConfig.projectId) document.getElementById('cfg-project').value = tolgeeConfig.projectId;
+    if (tolgeeConfig.apiKey)    document.getElementById('cfg-key').value     = tolgeeConfig.apiKey;
+    if (tolgeeConfig.apiKey)    _api = null;
+
+    // 3) GitHub 설정 불러오기
+    const gh = getGithubConfig();
+    if (gh.token)  document.getElementById('gh-token').value  = gh.token;
+    if (gh.owner)  document.getElementById('gh-owner').value  = gh.owner;
+    if (gh.repo)   document.getElementById('gh-repo').value   = gh.repo;
+    if (gh.branch) document.getElementById('gh-branch').value = gh.branch;
+  }
+  renderScreenSelect(); renderScreenList(); renderFeatMap();
 }
-renderScreenSelect(); renderScreenList(); renderFeatMap();
+initApp();
 </script>
 </body>
 </html>
