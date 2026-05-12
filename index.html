@@ -376,6 +376,33 @@ async function pushConfigToGithub(data) {
 }
 
 let featureMap = {'1':'회원가입','2':'홈 피드','3':'온보딩','4':'프로필','5':'결제'};
+let keyRules = {
+  component: {
+    btn:   ['버튼','클릭','확인','취소','저장','다음','이전','완료','제출','등록','삭제','수정','시작','계속'],
+    input: ['입력','placeholder','검색어','입력해주세요'],
+    toast: ['토스트','알림'],
+    modal: ['모달','팝업'],
+    tab:   ['탭'],
+    label: []
+  },
+  element: {
+    cta:         ['다음','시작','완료','제출','계속'],
+    save:        ['저장'],
+    cancel:      ['취소'],
+    confirm:     ['확인'],
+    delete:      ['삭제'],
+    placeholder: ['입력해주세요','검색어','입력'],
+    title:       ['제목'],
+    description: ['설명','안내']
+  },
+  state: {
+    error:   ['오류','실패','에러','잘못'],
+    empty:   ['없어요','없습니다','비어','empty'],
+    loading: ['로딩','불러오는'],
+    success: ['성공','완료됐','됐어요'],
+    disabled:['비활성','불가']
+  }
+};
 let screenList = ['common','onboarding','home','profile','settings','payment','search'];
 let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:''};
 let selectedFrames = [];
@@ -414,6 +441,7 @@ function handleFigmaMsg(msg) {
         if (remote) {
           if (remote.featureMap) featureMap = remote.featureMap;
           if (remote.screenList) screenList = remote.screenList;
+          if (remote.keyRules)   keyRules   = remote.keyRules;
           if (remote.tolgee) {
             if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
             if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
@@ -564,6 +592,14 @@ async function syncFromGithub() {
   }
 }
 
+function saveClaudeKey() {
+  const key = document.getElementById('claude-key').value.trim();
+  try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
+  // 코드에서 직접 사용할 수 있도록 전역 업데이트
+  showBadge('claude-saved');
+  showToast('Claude API Key가 저장됐어요');
+}
+
 function saveTolgee() {
   // url/projectId는 config.json에서 관리 — API Key만 저장
   const apiKey = document.getElementById('cfg-key').value.trim();
@@ -670,12 +706,59 @@ async function getCached(){
 // ── 유사도 ────────────────────────────────────────────────────────────────────
 function lev(a,b){const m=a.length,n=b.length,dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);return dp[m][n];}
 function sim(a,b){if(a===b)return 100;const mx=Math.max(a.length,b.length);return mx===0?100:Math.round((1-lev(a,b)/mx)*100);}
-function genKey(scr,val){
-  const cm=[[/(버튼|확인|취소|저장|다음|이전|계속|시작|완료|제출|등록|삭제)/,'btn'],[/(입력|placeholder)/,'input'],[/(오류|에러|실패)/,'error'],[/(비어|없어)/,'empty']];
-  let c='label';for(const[re,v]of cm){if(re.test(val)){c=v;break;}}
-  const em=[[/(다음|계속|시작|완료|제출)/,'cta'],[/(저장)/,'save'],[/(취소)/,'cancel'],[/(확인)/,'confirm'],[/(삭제)/,'delete']];
-  let e='';for(const[re,v]of em){if(re.test(val)){e=v;break;}}
-  return[scr,c,e].filter(Boolean).join('.');
+// ── 규칙 기반 키 추천 (config.json의 keyRules 사용) ─────────────────────────
+async function recommendKeysWithClaude(screen, val, existingKeys) {
+  // Claude API 대신 규칙 기반으로 후보 생성
+  var candidates = genKeyCandidates(screen, val);
+
+  // 기존 키 목록과 중복 체크 — 이미 있는 키면 표시
+  candidates = candidates.map(function(k) {
+    var exists = existingKeys.some(function(item) { return item.key === k; });
+    return exists ? k + '  ⚠️ 이미 존재' : k;
+  });
+
+  return candidates;
+}
+
+// 문자열에서 키워드 매칭으로 세그먼트 찾기
+function matchRule(val, ruleMap) {
+  var keys = Object.keys(ruleMap);
+  for (var i = 0; i < keys.length; i++) {
+    var seg = keys[i];
+    var keywords = ruleMap[seg];
+    for (var j = 0; j < keywords.length; j++) {
+      if (val.indexOf(keywords[j]) !== -1) return seg;
+    }
+  }
+  return null;
+}
+
+// 규칙 기반으로 키 후보 3개 생성
+function genKeyCandidates(scr, val) {
+  var comp  = matchRule(val, keyRules.component) || 'label';
+  var elem  = matchRule(val, keyRules.element)   || '';
+  var state = matchRule(val, keyRules.state)      || '';
+
+  // 후보 1: screen.component.element (가장 기본)
+  var c1 = [scr, comp, elem].filter(Boolean).join('.');
+
+  // 후보 2: screen.component (element 없이)
+  var c2 = elem ? [scr, comp].join('.') : '';
+
+  // 후보 3: common.component.element (common 화면으로)
+  var c3 = scr !== 'common' ? ['common', comp, elem].filter(Boolean).join('.') : '';
+
+  // state가 있으면 후보 1에 state 붙인 버전도 추가
+  if (state && !elem) {
+    c2 = [scr, comp, state].join('.');
+  }
+
+  return [c1, c2, c3].filter(function(k) { return k && k !== c1 || !c2; }).filter(Boolean).filter(function(k, i, arr) { return arr.indexOf(k) === i; }).slice(0, 3);
+}
+
+// 단일 키 생성 (fallback용)
+function genKey(scr, val) {
+  return genKeyCandidates(scr, val)[0] || scr + '.label';
 }
 function uT(){
   const r=parseInt(document.getElementById('tr-r').value);
@@ -710,7 +793,7 @@ async function doSearch(){
     }}
     else db=MOCK_DB;
     const res=db.map(item=>({...item,sim:sim(val,item.val)})).filter(i=>i.sim>=thresh.sim).sort((a,b)=>b.sim-a.sim).slice(0,8);
-    renderResults(val,res,thresh);
+    await renderResults(val,res,thresh);
   }finally{
     btn.innerHTML='<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 유사 문자열 검색';
     btn.disabled=false;
@@ -751,7 +834,7 @@ function rmTag(cId,idx){
 }
 
 // ── 결과 렌더 ────────────────────────────────────────────────────────────────
-function renderResults(inputVal,results,thresh){
+async function renderResults(inputVal,results,thresh){
   const scr=document.getElementById('screen-sel').value;
   const area=document.getElementById('key-results');
   let html='';
@@ -767,16 +850,70 @@ function renderResults(inputVal,results,thresh){
       <div class="fig-row"><div class="fig-lbl">📱 Figma 화면</div><div class="ftags" id="tags-${cId}">${renderFTags(cardTags[cId],cId,false)}</div></div>
     </div>`;
   });
-  const nk=genKey(scr,inputVal);cardTags['cn']=[];
-  html+=`<hr class="divider"><div class="card new-card" id="cn" onclick="selN(this,'${inputVal.replace(/'/g,"\\'")}')">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:5px;margin-bottom:2px">
-      <div style="flex:1"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">신규 키 (직접 수정 가능)</div><input class="new-ki" id="nki" value="${nk}" onclick="event.stopPropagation()" oninput="onNKI(this.value)"></div>
-      <span class="badge bn">신규</span>
-    </div>
-    <div class="val-t" style="color:var(--text-3)">${inputVal}</div>
-    <div class="fig-row"><div class="fig-lbl">📱 Figma 화면 연결</div><div class="ftags" id="tags-cn"><button class="ftag-add" onclick="showTI('cn')">+ Figma</button></div></div>
-  </div>`;
-  area.innerHTML=html;
+  // 신규 카드는 Claude 추천 로딩 중 플레이스홀더로 먼저 렌더
+  cardTags['cn']=[];
+  area.innerHTML = html;
+
+  // 신규 카드를 DOM으로 직접 생성 (따옴표 충돌 방지)
+  var divider = document.createElement('hr');
+  divider.className = 'divider';
+  area.appendChild(divider);
+
+  var cnWrap = document.createElement('div');
+  cnWrap.className = 'card new-card';
+  cnWrap.id = 'cn-wrap';
+  cnWrap.innerHTML = [
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">',
+      '<span style="font-size:10px;color:var(--text-3)">신규 키 추천</span>',
+      '<span class="badge bn">신규</span>',
+    '</div>',
+    '<div id="claude-loading" style="font-size:11px;color:var(--text-3);padding:6px 0">',
+      '<span class="ld"><span></span><span></span><span></span></span> AI가 키를 추천하는 중...',
+    '</div>',
+    '<div id="claude-suggestions" style="display:none"></div>',
+    '<div style="margin-top:8px">',
+      '<div style="font-size:10px;color:var(--text-3);margin-bottom:4px">직접 입력</div>',
+      '<input class="new-ki" id="nki" value="" placeholder="키를 직접 입력하거나 위에서 선택">',
+    '</div>',
+    '<div class="fig-row"><div class="fig-lbl">📱 Figma 화면 연결</div><div class="ftags" id="tags-cn"></div></div>',
+  ].join('');
+  area.appendChild(cnWrap);
+
+  // nki 이벤트
+  var nkiEl = document.getElementById('nki');
+  if (nkiEl) {
+    nkiEl.addEventListener('click', function(e) { e.stopPropagation(); });
+    nkiEl.addEventListener('input', function() { onNKI(this.value); });
+  }
+
+  // Figma 태그 추가 버튼
+  var tagsCn = document.getElementById('tags-cn');
+  if (tagsCn) {
+    var addBtn = document.createElement('button');
+    addBtn.className = 'ftag-add';
+    addBtn.textContent = '+ Figma';
+    addBtn.addEventListener('click', function() { showTI('cn'); });
+    tagsCn.appendChild(addBtn);
+  }
+
+  // 카드 클릭 시 selN
+  cnWrap.addEventListener('click', function() { selN(this, inputVal); });
+
+  // Claude 추천 비동기 로드
+  const existingKeys = (await getCached()) || MOCK_DB;
+  const suggestions = await recommendKeysWithClaude(scr, inputVal, existingKeys);
+  const loadingEl = document.getElementById('claude-loading');
+  const suggestEl = document.getElementById('claude-suggestions');
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (suggestEl) {
+    suggestEl.style.display = 'block';
+    renderSuggestions(suggestEl, suggestions, inputVal);
+    if (suggestions[0]) {
+      const nki = document.getElementById('nki');
+      if (nki) nki.value = suggestions[0];
+      selKey = suggestions[0];
+    }
+  }
 }
 function selE(el,key,val,keyId){
   document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');
@@ -785,8 +922,39 @@ function selE(el,key,val,keyId){
   if(t&&!t.querySelector('.ftag-add'))t.innerHTML=renderFTags(cardTags[el.id],el.id,true);
   showConfirm(key,val);
 }
+function renderSuggestions(container, suggestions, inputVal) {
+  container.innerHTML = '';
+  suggestions.forEach(function(k) {
+    const div = document.createElement('div');
+    div.style.cssText = 'font-family:var(--mono);font-size:11px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer;transition:border-color .15s';
+    div.textContent = k;
+    div.addEventListener('mouseover', function() { this.style.borderColor = 'var(--border-strong)'; });
+    div.addEventListener('mouseout',  function() { this.style.borderColor = 'var(--border)'; });
+    div.addEventListener('click', function(e) { selectSuggestion(k, inputVal, e); });
+    container.appendChild(div);
+  });
+}
+
+function selectSuggestion(key, val, event) {
+  event.stopPropagation();
+  // 선택한 추천키를 직접입력란에 반영하고 confirm 표시
+  const nki = document.getElementById('nki');
+  if (nki) nki.value = key;
+  selExistingKeyId = null;
+  selKey = key; selVal = val; selTags = [...(cardTags['cn'] || [])];
+  // 카드 selected 처리
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  const wrap = document.getElementById('cn-wrap');
+  if (wrap) wrap.classList.add('selected');
+  showConfirm(key, val);
+  // 선택된 항목 하이라이트
+  event.currentTarget.style.borderColor = 'var(--text)';
+  event.currentTarget.style.fontWeight = '500';
+}
+
 function selN(el,val){
-  document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));
+  const wrap=document.getElementById('cn-wrap');if(wrap)wrap.classList.add('selected');
   selExistingKeyId=null;
   selKey=document.getElementById('nki').value||genKey(document.getElementById('screen-sel').value,val);
   selVal=val;selTags=[...(cardTags['cn']||[])];
@@ -862,6 +1030,7 @@ async function initApp() {
     if (remote) {
       if (remote.featureMap) featureMap = remote.featureMap;
       if (remote.screenList) screenList = remote.screenList;
+      if (remote.keyRules)   keyRules   = remote.keyRules;
       // config.json에서 tolgee url/projectId 자동 적용 (팀 공통값)
       if (remote.tolgee) {
         if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
