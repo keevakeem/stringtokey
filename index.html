@@ -1408,13 +1408,10 @@ document.getElementById('feat-ver').addEventListener('input',renderPreview);
 function renderReplaceLangSelect() {
   const sel = document.getElementById('replace-lang-sel');
   const langs = tolgeeConfig.langs && tolgeeConfig.langs.length ? tolgeeConfig.langs : ['ko-KR'];
-  const baseLang = langs[0];
-  // 기본 언어 제외한 나머지 언어만 선택지로
-  const targets = langs.filter(function(l) { return l !== baseLang; });
-  sel.innerHTML = targets.map(function(l) {
+  sel.innerHTML = langs.map(function(l) {
     return '<option value="' + l + '">' + l + '</option>';
   }).join('');
-  document.getElementById('base-lang-label').textContent = baseLang;
+  document.getElementById('base-lang-label').textContent = langs[0];
 }
 
 let replaceMap = []; // { nodeId, fromText, toText }
