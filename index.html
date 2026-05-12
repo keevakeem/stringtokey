@@ -1314,20 +1314,27 @@ function uCT(){
 }
 async function regKey(){
   if(!selKey)return;
+  // 등록 시점에 값을 로컬 변수로 고정 — 비동기 처리 중 selKey가 변경되어도 안전
+  const keyToRegister = selKey;
+  const valToRegister = selVal;
+  const tagsToRegister = selTags.slice();
+  const existingId = selExistingKeyId;
+  const nodeIdToRename = currentTextNodeId;
+
   const btn=document.querySelector('#confirm-box .btn-p');
   const orig=btn.textContent;btn.innerHTML='<span class="ld"><span></span><span></span><span></span></span>';btn.disabled=true;
   const a=getApi();
   try{
     if(a){
-      await a.registerKey({keyName:selKey,val:selVal,figmaTags:selTags,existingKeyId:selExistingKeyId});
+      await a.registerKey({keyName:keyToRegister,val:valToRegister,figmaTags:tagsToRegister,existingKeyId:existingId});
       _cache=null;
-      showToast('✓ "' + selKey + '" Tolgee에 등록됐어요');
+      showToast('✓ "' + keyToRegister + '" Tolgee에 등록됐어요');
       // 선택된 텍스트 레이어 이름을 키값으로 변경 (체크박스 확인)
       const renameChk = document.getElementById('rename-layer-chk');
-      if(IS_FIGMA && currentTextNodeId && renameChk && renameChk.checked) {
-        toFigma({ type: 'rename-layer', nodeId: currentTextNodeId, keyName: selKey });
+      if(IS_FIGMA && nodeIdToRename && renameChk && renameChk.checked) {
+        toFigma({ type: 'rename-layer', nodeId: nodeIdToRename, keyName: keyToRegister });
       }
-      toFigma({type:'notify',message:'키 등록: ' + selKey});
+      toFigma({type:'notify',message:'키 등록: ' + keyToRegister});
     }else{showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요');}
   }catch(e){showToast('오류: ' + e.message);}
   finally{btn.textContent=orig;btn.disabled=false;}
