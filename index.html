@@ -833,10 +833,17 @@ class TolgeeAPI{
     }
     return all;
   }
-  async createKey({keyName,translations={},tags=[]}) {
-    // 1단계: 키 생성 (POST /v2/projects/:id/keys)
+  async createKey({keyName, translations={}, tags=[]}) {
+    // POST /v2/projects/:id/keys 에 translations 포함해서 한 번에 생성
+    // Tolgee v2: translations 형식 { "ko": "텍스트값" }
+    const transBody = {};
+    Object.entries(translations).forEach(([lang, text]) => {
+      transBody[lang] = typeof text === 'object' ? text.text : text;
+    });
+
     const body = {
       name: keyName,
+      translations: transBody,
       tags: tags,
     };
     const r = await this._fetch(
@@ -847,26 +854,7 @@ class TolgeeAPI{
       const e = await r.json().catch(() => ({}));
       throw new Error(JSON.stringify(e));
     }
-    const created = await r.json();
-
-    // 2단계: 번역 등록 (PUT /v2/projects/:id/translations)
-    // Tolgee v2: translations 값은 문자열 직접 (객체 아님)
-    const langEntries = Object.entries(translations);
-    if (langEntries.length > 0) {
-      const transBody = { key: keyName, translations: {} };
-      langEntries.forEach(([lang, text]) => {
-        transBody.translations[lang] = typeof text === 'object' ? text.text : text;
-      });
-      const tr = await this._fetch(
-        `${this.baseUrl}/v2/projects/${this.projectId}/translations`,
-        { method: 'PUT', body: JSON.stringify(transBody) }
-      );
-      if (!tr.ok) {
-        const e = await tr.json().catch(() => ({}));
-        throw new Error('번역 등록 실패: ' + JSON.stringify(e));
-      }
-    }
-    return created;
+    return r.json();
   }
 
   async addTags(keyId, newTags=[]) {
