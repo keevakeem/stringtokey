@@ -884,8 +884,12 @@ class TolgeeAPI{
       (d._embedded?.keys||[]).forEach(item=>{
         const trans = item.translations?.[lang];
         const val = trans?.text || '';
-        // untranslated 상태이거나 값이 없으면 빈 문자열로 처리
-        const isEmpty = !val || trans?.state === 'UNTRANSLATED';
+        const state = trans?.state || '';
+        // 디버그: 첫 5개 항목 콘솔 출력
+        if (all.length < 5) {
+          console.log('[SKT] key:', item.keyName, '| lang:', lang, '| val:', val, '| state:', state, '| raw:', JSON.stringify(trans));
+        }
+        const isEmpty = !val || state === 'UNTRANSLATED';
         const figmaTags=(item.keyTags||[]).filter(t=>t.name.startsWith('figma:')).map(t=>t.name.replace('figma:',''));
         all.push({key:item.keyName, val: isEmpty ? '' : val, figmaTags, usage:figmaTags.length||1, keyId:item.keyId});
       });
