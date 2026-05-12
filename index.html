@@ -324,12 +324,10 @@ select{cursor:pointer}
 
 <script>
 // ── 상태 ──────────────────────────────────────────────────────────────────────
-// ── Storage 유틸 (Figma = clientStorage 경유, 브라우저 = localStorage) ──────
-const IS_FIGMA = window.parent !== window;  // iframe 안이면 Figma 환경
+const IS_FIGMA = window.parent !== window;
 
 function storageSave(key, value) {
   if (IS_FIGMA) {
-    // Figma: ui.html → code.js → clientStorage
     toFigma({ type: 'save-storage', key, value: JSON.stringify(value) });
   } else {
     try { localStorage.setItem('skt_' + key, JSON.stringify(value)); } catch(e) {}
@@ -337,7 +335,7 @@ function storageSave(key, value) {
 }
 
 function storageLoad(key, fallback) {
-  if (IS_FIGMA) return fallback; // Figma는 init 메시지로 받음
+  if (IS_FIGMA) return fallback;
   try {
     const v = localStorage.getItem('skt_' + key);
     return v ? JSON.parse(v) : fallback;
@@ -345,7 +343,6 @@ function storageLoad(key, fallback) {
 }
 
 // ── GitHub config.json 연동 ───────────────────────────────────────────────────
-// 토큰은 localStorage에만 보관 (코드에 절대 하드코딩 X)
 function getGithubConfig() {
   try {
     return {
@@ -366,7 +363,6 @@ function saveGithubConfig(token, owner, repo, branch) {
   } catch(e) {}
 }
 
-// config.json을 GitHub Pages에서 fetch (캐시 무시)
 async function fetchRemoteConfig() {
   try {
     const res = await fetch('./config.json?t=' + Date.now());
@@ -378,7 +374,6 @@ async function fetchRemoteConfig() {
   }
 }
 
-// config.json을 GitHub API로 업데이트
 async function pushConfigToGithub(data) {
   const gh = getGithubConfig();
   if (!gh.token || !gh.owner || !gh.repo) {
@@ -388,10 +383,10 @@ async function pushConfigToGithub(data) {
   const path = 'config.json';
   const apiBase = `https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${path}`;
 
-  // 현재 파일의 SHA 가져오기 (업데이트에 필요)
   let sha = '';
   try {
     const getRes = await fetch(apiBase, {
+      credentials: 'omit',
       headers: { 'Authorization': 'token ' + gh.token, 'Accept': 'application/vnd.github.v3+json' }
     });
     if (getRes.ok) { const d = await getRes.json(); sha = d.sha || ''; }
@@ -407,6 +402,7 @@ async function pushConfigToGithub(data) {
   try {
     const putRes = await fetch(apiBase, {
       method: 'PUT',
+      credentials: 'omit',
       headers: {
         'Authorization': 'token ' + gh.token,
         'Accept': 'application/vnd.github.v3+json',
@@ -456,9 +452,9 @@ let keyRules = {
 let screenList = ['common','onboarding','home','profile','settings','payment','search'];
 let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:''};
 let selectedFrames = [];
-let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
-let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
-let bulkMode = false;   // 일괄 모드 여부
+let layerContext = null;
+let bulkTexts = [];
+let bulkMode = false;
 let cardTags = {};
 let selKey=null,selVal=null,selTags=[],selExistingKeyId=null;
 let _api=null,_cache=null,_cacheTime=0;
@@ -477,7 +473,6 @@ const MOCK_DB=[
 ];
 
 // ── Figma 브릿지 메시지 수신 ──────────────────────────────────────────────────
-// ui.html이 iframe에 { source:'figma-bridge', payload } 형태로 전달
 window.addEventListener('message', (event) => {
   if (event.data?.source !== 'figma-bridge') return;
   handleFigmaMsg(event.data.payload);
@@ -489,7 +484,6 @@ function handleFigmaMsg(msg) {
     case 'init':
       if (msg.featureMap) featureMap = msg.featureMap;
       if (msg.screenList) screenList = msg.screenList;
-      // Figma 환경에서도 config.json에서 url/projectId 불러오기
       fetchRemoteConfig().then(remote => {
         if (remote) {
           if (remote.featureMap) featureMap = remote.featureMap;
@@ -506,7 +500,6 @@ function handleFigmaMsg(msg) {
           }
           renderScreenSelect(); renderScreenList(); renderFeatMap();
         }
-        // API Key는 clientStorage에서 (Figma) 또는 localStorage에서 (브라우저)
         const savedKey = msg.tolgeeConfig?.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
         tolgeeConfig.apiKey = savedKey;
         document.getElementById('cfg-url').value     = tolgeeConfig.url || '';
@@ -523,7 +516,6 @@ function handleFigmaMsg(msg) {
     case 'saved':
       if (msg.key === 'featureMap') { showBadge('screen-saved'); showBadge('feat-saved'); }
       if (msg.key === 'tolgeeConfig') showBadge('tolgee-saved');
-      if (msg.key === 'storage') { /* 범용 저장 완료 */ }
       break;
     case 'rename-done':
       document.getElementById('rename-list').innerHTML =
@@ -537,21 +529,18 @@ function handleFigmaMsg(msg) {
   }
 }
 
-// Figma로 메시지 보내기 (부모 ui.html 경유)
 function toFigma(payload) {
   window.parent.postMessage({ source: 'app-to-figma', payload }, '*');
 }
 
 // ── 선택 상태 반영 ────────────────────────────────────────────────────────────
 function applySelection(msg) {
-  // 프레임 목록 (rename 탭)
   selectedFrames = (msg.frames||[]).slice().sort((a,b)=>a.x-b.x);
   const hasSel = selectedFrames.length > 0;
   document.getElementById('no-sel').style.display = hasSel ? 'none' : 'block';
   document.getElementById('rename-content').style.display = hasSel ? 'block' : 'none';
   if (hasSel) renderPreview();
 
-  // 텍스트 노드 힌트 (문자열 키 탭)
   const texts = msg.texts || [];
   const hint = document.getElementById('hint-box');
   if (texts.length === 1) {
@@ -560,14 +549,12 @@ function applySelection(msg) {
     const fn = texts[0].frameName;
     document.getElementById('hint-frame').textContent = fn ? '📱 프레임: ' + fn : '';
     hint.style.display = 'block';
-    // 맥락 저장 (Claude 추천에 활용)
     layerContext = texts[0].context || null;
   } else {
     hint.style.display = 'none';
     layerContext = null;
   }
 
-  // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
   bulkTexts = msg.bulkTexts || [];
   document.getElementById('bulk-count').textContent = bulkTexts.length;
   var badge = document.getElementById('bulk-badge');
@@ -578,14 +565,9 @@ function applySelection(msg) {
   if (bulkTexts.length > 0 && bulkMode) {
     renderBulkList();
   }
-  // 프레임 일괄 모드에서 자동 갱신
-  if (bulkTexts.length > 0 && bulkMode) {
-    renderBulkList();
-  }
 }
 
 // ── 탭 ───────────────────────────────────────────────────────────────────────
-// ── 모드 전환 ────────────────────────────────────────────────────────────────
 function setMode(mode) {
   bulkMode = mode === 'bulk';
   document.getElementById('single-area').style.display = bulkMode ? 'none' : 'block';
@@ -602,20 +584,15 @@ async function renderBulkList() {
     list.innerHTML = '<div class="empty">Figma에서 프레임을 선택해주세요.</div>';
     return;
   }
-  // 로딩 표시
   list.innerHTML = '<div class="empty"><span class="ld"><span></span><span></span><span></span></span> 키 추천 중...</div>';
 
   var existingKeys = [];
   try { existingKeys = (await getCached()) || MOCK_DB; } catch(e) { existingKeys = MOCK_DB; }
 
-  var html = '';
   var scr = document.getElementById('screen-sel').value;
-
-  // 각 문자열에 대해 키 추천
   var items = [];
   for (var i = 0; i < bulkTexts.length; i++) {
     var t = bulkTexts[i];
-    // layerContext를 각 텍스트의 context로 설정
     layerContext = t.context || null;
     var candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
     var suggestedKey = candidates[0] ? candidates[0].replace('  ⚠️ 이미 존재', '') : genKey(scr, t.characters);
@@ -640,7 +617,6 @@ async function renderBulkList() {
   });
 }
 
-// ── 개별 등록 ─────────────────────────────────────────────────────────────────
 async function registerBulkItem(idx) {
   var keyEl = document.getElementById('bulk-key-' + idx);
   var itemEl = document.getElementById('bulk-item-' + idx);
@@ -667,7 +643,6 @@ async function registerBulkItem(idx) {
   }
 }
 
-// ── 전체 등록 ─────────────────────────────────────────────────────────────────
 async function registerAll() {
   var items = document.querySelectorAll('.bulk-item:not(.done)');
   if (!items.length) { showToast('등록할 항목이 없어요'); return; }
@@ -675,12 +650,11 @@ async function registerAll() {
     var itemEl = document.getElementById('bulk-item-' + i);
     if (itemEl && !itemEl.classList.contains('done')) {
       await registerBulkItem(i);
-      await new Promise(function(r) { setTimeout(r, 300); }); // 연속 요청 방지
+      await new Promise(function(r) { setTimeout(r, 300); });
     }
   }
 }
 
-// ── 키 재추천 ─────────────────────────────────────────────────────────────────
 async function refreshBulk() {
   await renderBulkList();
 }
@@ -691,7 +665,6 @@ function sw(t) {
   document.getElementById('tab-'+t).classList.add('active');
 }
 
-// ── 화면 드롭다운 ─────────────────────────────────────────────────────────────
 function renderScreenSelect() {
   const sel = document.getElementById('screen-sel');
   const cur = sel.value;
@@ -699,7 +672,6 @@ function renderScreenSelect() {
   if (screenList.includes(cur)) sel.value = cur;
 }
 
-// ── 설정: 화면 목록 ───────────────────────────────────────────────────────────
 function renderScreenList() {
   document.getElementById('screen-list').innerHTML = screenList.map((s,i)=>
     `<div class="screen-item"><span class="screen-val">${s}</span><button class="rm-btn" onclick="rmScreen(${i})">×</button></div>`
@@ -716,7 +688,6 @@ function addScreen() {
 }
 function rmScreen(i) { screenList.splice(i,1); renderScreenList(); renderScreenSelect(); saveFeatureMap(); }
 
-// ── 설정: 기능 이름 매핑 ──────────────────────────────────────────────────────
 function renderFeatMap() {
   document.getElementById('feat-map-list').innerHTML = Object.entries(featureMap).map(([k,v])=>
     `<div class="screen-item"><span class="prev-badge" style="margin-right:4px">${k}</span><span style="flex:1;font-size:12px">${v}</span><button class="rm-btn" onclick="rmFeat('${k}')">×</button></div>`
@@ -732,19 +703,15 @@ function addFeat() {
 }
 function rmFeat(k) { delete featureMap[k]; renderFeatMap(); saveFeatureMap(); }
 
-// clientStorage 저장 (code.js 경유)
 async function saveFeatureMap() {
   storageSave('featureMap', featureMap);
   storageSave('screenList', screenList);
   if (IS_FIGMA) toFigma({ type:'save-feature-map', featureMap, screenList });
-  // config.json 동기화
   const ok = await pushConfigToGithub({ featureMap, screenList });
   if (ok) showToast('✓ config.json 저장됨');
 }
 
-// ── Tolgee 설정 ───────────────────────────────────────────────────────────────
 function saveGithubSettings() {
-  // token만 저장, owner/repo/branch는 config.json에서 관리
   const token = document.getElementById('gh-token').value.trim();
   try { localStorage.setItem('skt_gh_token', token); } catch(e) {}
   showBadge('gh-saved');
@@ -765,14 +732,6 @@ async function syncFromGithub() {
 }
 
 function saveClaudeKey() {
-  const key = document.getElementById('claude-key').value.trim();
-  try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
-  // 코드에서 직접 사용할 수 있도록 전역 업데이트
-  showBadge('claude-saved');
-  showToast('Claude API Key가 저장됐어요');
-}
-
-function saveClaudeKey() {
   var key = document.getElementById('claude-key').value.trim();
   try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
   showBadge('claude-saved');
@@ -780,15 +739,14 @@ function saveClaudeKey() {
 }
 
 function saveTolgee() {
-  // url/projectId는 config.json에서 관리 — API Key만 저장
   const apiKey = document.getElementById('cfg-key').value.trim();
   tolgeeConfig.apiKey = apiKey;
   _api = null; _cache = null; _cacheTime = 0;
-  // API Key는 localStorage에 저장 (Figma/브라우저 공통)
   try { localStorage.setItem('skt_tolgee_apikey', apiKey); } catch(e) {}
   if (IS_FIGMA) toFigma({ type:'save-tolgee-config', config: tolgeeConfig });
   showBadge('tolgee-saved');
 }
+
 async function testTolgee() {
   saveTolgee();
   const a=getApi(); if(!a){showToast('API 정보를 입력해주세요');return;}
@@ -796,25 +754,43 @@ async function testTolgee() {
     const d=await a.test();
     showToast('✓ 연결 성공: ' + (d.name||'프로젝트'));
   } catch(e) {
-    const msg = e.message||'';
-    if(msg.includes('DOCTYPE')||msg.includes('JSON')||msg.includes('Failed to fetch')){
-      showToast('✗ CORS 오류 — 서버에서 GitHub Pages 도메인을 허용해야 해요');
-    } else {
-      showToast('✗ ' + msg);
-    }
+    showToast('✗ ' + (e.message||'연결 실패'));
   }
 }
 
 // ── TolgeeAPI ─────────────────────────────────────────────────────────────────
-class TolgeeAPI{
-  constructor({baseUrl,projectId,apiKey}){this.baseUrl=baseUrl.replace(/\/$/,'');this.projectId=projectId;this.apiKey=apiKey;}
-  get hdr(){return{'Content-Type':'application/json','X-API-Key':this.apiKey};}
-  async fetchAllKeys({lang='ko',pageSize=200}={}){
+class TolgeeAPI {
+  constructor({baseUrl,projectId,apiKey}){
+    this.baseUrl=baseUrl.replace(/\/$/,'');
+    this.projectId=projectId;
+    this.apiKey=apiKey;
+  }
+
+  get hdr(){
+    return {
+      'Content-Type':'application/json',
+      'X-API-Key':this.apiKey
+    };
+  }
+
+  // ★ 모든 fetch를 이 메서드로 경유 → credentials: 'omit' 일괄 적용
+  async _fetch(url, options={}) {
+    return fetch(url, {
+      credentials: 'omit',
+      ...options,
+      headers: { ...this.hdr, ...(options.headers||{}) },
+    });
+  }
+
+  async fetchAllKeys({lang='ko',pageSize=200}={}) {
     let page=0,all=[],total=1;
     while(page<total){
-      const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${page}`,{headers:this.hdr});
-      if(!r.ok)throw new Error(`Tolgee ${r.status}`);
-      const d=await r.json();total=d.page?.totalPages||1;
+      const r=await this._fetch(
+        `${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${page}`
+      );
+      if(!r.ok) throw new Error(`Tolgee ${r.status}`);
+      const d=await r.json();
+      total=d.page?.totalPages||1;
       (d._embedded?.keys||[]).forEach(item=>{
         const val=item.translations?.[lang]?.text||'';
         const figmaTags=(item.keyTags||[]).filter(t=>t.name.startsWith('figma:')).map(t=>t.name.replace('figma:',''));
@@ -824,9 +800,8 @@ class TolgeeAPI{
     }
     return all;
   }
-  async createKey({keyName,translations={},tags=[]}){
-    // Tolgee v2: POST /v2/projects/{id}/keys
-    // body: { name, translations: { ko: { text: '...' } }, tags: [{ name: '...' }] }
+
+  async createKey({keyName,translations={},tags=[]}) {
     const translationsBody = {};
     Object.entries(translations).forEach(([lang, text]) => {
       translationsBody[lang] = { text };
@@ -836,66 +811,71 @@ class TolgeeAPI{
       translations: translationsBody,
       tags: tags.map(n => ({ name: n })),
     };
-    const r = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys`, {
-      method: 'POST',
-      headers: this.hdr,
-      body: JSON.stringify(body),
-    });
+    const r = await this._fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
+      { method: 'POST', body: JSON.stringify(body) }
+    );
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       throw new Error(e.message || '키 생성 실패: ' + r.status);
     }
     return r.json();
   }
-  async addTags(keyId,newTags=[]){
-    // 현재 키 정보 조회
-    const g = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, { headers: this.hdr });
+
+  async addTags(keyId, newTags=[]) {
+    const g = await this._fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`
+    );
     if (!g.ok) throw new Error('키 조회 실패: ' + g.status);
     const kd = await g.json();
     const existingTags = (kd.tags || []).map(t => t.name);
     const merged = [...new Set([...existingTags, ...newTags])];
-    // PATCH /v2/projects/{id}/keys/{keyId} 로 태그 업데이트
-    const p = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, {
-      method: 'PATCH',
-      headers: this.hdr,
-      body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }),
-    });
+    const p = await this._fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`,
+      { method: 'PATCH', body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }) }
+    );
     if (!p.ok) throw new Error('태그 업데이트 실패: ' + p.status);
     return p.json();
   }
-  async registerKey({keyName,val,lang='ko',figmaTags=[],existingKeyId=null}){
+
+  async registerKey({keyName,val,lang='ko',figmaTags=[],existingKeyId=null}) {
     const tags=['lint:passed',...figmaTags.map(t=>`figma:${t}`)];
-    if(existingKeyId){await this.addTags(existingKeyId,tags);return{type:'tag-added',keyName};}
+    if(existingKeyId){ await this.addTags(existingKeyId,tags); return{type:'tag-added',keyName}; }
     const r=await this.createKey({keyName,translations:{[lang]:val},tags});
     return{type:'created',keyName,keyId:r.id};
   }
-  async test(){const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}`,{headers:this.hdr});if(!r.ok)throw new Error(String(r.status));return r.json();}
+
+  async test() {
+    const r=await this._fetch(`${this.baseUrl}/v2/projects/${this.projectId}`);
+    if(!r.ok) throw new Error(String(r.status));
+    return r.json();
+  }
 }
+
 function getApi(){
-  if(!tolgeeConfig.url||!tolgeeConfig.projectId||!tolgeeConfig.apiKey)return null;
-  if(!_api)_api=new TolgeeAPI({baseUrl:tolgeeConfig.url,projectId:tolgeeConfig.projectId,apiKey:tolgeeConfig.apiKey});
+  if(!tolgeeConfig.url||!tolgeeConfig.projectId||!tolgeeConfig.apiKey) return null;
+  if(!_api) _api=new TolgeeAPI({baseUrl:tolgeeConfig.url,projectId:tolgeeConfig.projectId,apiKey:tolgeeConfig.apiKey});
   return _api;
 }
+
 async function getCached(){
-  const a=getApi();if(!a)return null;
-  if(_cache&&Date.now()-_cacheTime<CACHE_TTL)return _cache;
-  _cache=await a.fetchAllKeys();_cacheTime=Date.now();return _cache;
+  const a=getApi(); if(!a) return null;
+  if(_cache&&Date.now()-_cacheTime<CACHE_TTL) return _cache;
+  _cache=await a.fetchAllKeys(); _cacheTime=Date.now(); return _cache;
 }
 
 // ── 유사도 ────────────────────────────────────────────────────────────────────
 function lev(a,b){const m=a.length,n=b.length,dp=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);return dp[m][n];}
 function sim(a,b){if(a===b)return 100;const mx=Math.max(a.length,b.length);return mx===0?100:Math.round((1-lev(a,b)/mx)*100);}
-// ── 키 추천: Claude API (맥락 있을 때) + 규칙 기반 (fallback) ───────────────
+
+// ── 키 추천: Claude API + 규칙 기반 fallback ─────────────────────────────────
 async function recommendKeysWithClaude(screen, val, existingKeys) {
   var apiKey = '';
   try { apiKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
 
   var ruleCandidates = genKeyCandidates(screen, val);
-
-  // Claude API Key 없으면 규칙 기반으로
   if (!apiKey) return withDupeCheck(ruleCandidates, existingKeys);
 
-  // 맥락 정보 구성
   var contextLines = [];
   if (layerContext) {
     if (layerContext.componentName) contextLines.push('Component: ' + layerContext.componentName);
@@ -903,7 +883,6 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
     if (layerContext.siblings && layerContext.siblings.length) contextLines.push('Sibling texts: ' + layerContext.siblings.join(', '));
   }
   var contextStr = contextLines.length ? contextLines.join(' | ') : '(no layer context)';
-
   var keyExamples = existingKeys.slice(0, 30).map(function(k) { return k.key; }).join(', ');
   var ruleSuggestions = ruleCandidates.join(', ');
 
@@ -934,6 +913,7 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
   try {
     var res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      credentials: 'omit',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
@@ -960,7 +940,6 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
   }
 }
 
-// 중복 키 체크 후 표시
 function withDupeCheck(candidates, existingKeys) {
   return candidates.map(function(k) {
     var exists = existingKeys.some(function(item) { return item.key === k; });
@@ -968,7 +947,6 @@ function withDupeCheck(candidates, existingKeys) {
   });
 }
 
-// 문자열에서 키워드 매칭으로 세그먼트 찾기
 function matchRule(val, ruleMap) {
   var keys = Object.keys(ruleMap);
   for (var i = 0; i < keys.length; i++) {
@@ -981,15 +959,12 @@ function matchRule(val, ruleMap) {
   return null;
 }
 
-// 규칙 기반으로 키 후보 3개 생성
 function genKeyCandidates(scr, val) {
   var comp  = matchRule(val, keyRules.component) || 'label';
   var elem  = matchRule(val, keyRules.element)   || '';
   var state = matchRule(val, keyRules.state)      || '';
-
   var results = [];
 
-  // 후보 1: screen.component.element (가장 구체적)
   if (elem) {
     results.push([scr, comp, elem].join('.'));
   } else if (state) {
@@ -998,11 +973,9 @@ function genKeyCandidates(scr, val) {
     results.push([scr, comp].join('.'));
   }
 
-  // 후보 2: screen.component (elem/state 없이 간결하게)
   var c2 = [scr, comp].join('.');
   if (results.indexOf(c2) === -1) results.push(c2);
 
-  // 후보 3: common.component.element (공통 화면 버전)
   if (scr !== 'common') {
     var c3 = elem ? ['common', comp, elem].join('.') : ['common', comp].join('.');
     if (results.indexOf(c3) === -1) results.push(c3);
@@ -1011,10 +984,10 @@ function genKeyCandidates(scr, val) {
   return results.slice(0, 3);
 }
 
-// 단일 키 생성 (fallback용)
 function genKey(scr, val) {
   return genKeyCandidates(scr, val)[0] || scr + '.label';
 }
+
 function uT(){
   const r=parseInt(document.getElementById('tr-r').value);
   let s=parseInt(document.getElementById('tr-s').value);
@@ -1042,12 +1015,7 @@ async function doSearch(){
         db=await getCached();
         if(!db||db.length===0) db=MOCK_DB;
       }catch(e){
-        const msg=e.message||'';
-        if(msg.includes('DOCTYPE')||msg.includes('JSON')||msg.includes('Failed to fetch')){
-          showToast('CORS 오류 — Mock으로 검색');
-        } else {
-          showToast('API 오류(' + msg + ') — Mock 사용');
-        }
+        showToast('API 오류(' + (e.message||'') + ') — Mock 사용');
         db=MOCK_DB;
       }
     } else {
@@ -1111,11 +1079,10 @@ async function renderResults(inputVal,results,thresh){
       <div class="fig-row"><div class="fig-lbl">📱 Figma 화면</div><div class="ftags" id="tags-${cId}">${renderFTags(cardTags[cId],cId,false)}</div></div>
     </div>`;
   });
-  // 신규 카드는 Claude 추천 로딩 중 플레이스홀더로 먼저 렌더
+
   cardTags['cn']=[];
   area.innerHTML = html;
 
-  // 신규 카드를 DOM으로 직접 생성 (따옴표 충돌 방지)
   var divider = document.createElement('hr');
   divider.className = 'divider';
   area.appendChild(divider);
@@ -1140,14 +1107,12 @@ async function renderResults(inputVal,results,thresh){
   ].join('');
   area.appendChild(cnWrap);
 
-  // nki 이벤트
   var nkiEl = document.getElementById('nki');
   if (nkiEl) {
     nkiEl.addEventListener('click', function(e) { e.stopPropagation(); });
     nkiEl.addEventListener('input', function() { onNKI(this.value); });
   }
 
-  // Figma 태그 추가 버튼
   var tagsCn = document.getElementById('tags-cn');
   if (tagsCn) {
     var addBtn = document.createElement('button');
@@ -1157,10 +1122,8 @@ async function renderResults(inputVal,results,thresh){
     tagsCn.appendChild(addBtn);
   }
 
-  // 카드 클릭 시 selN
   cnWrap.addEventListener('click', function() { selN(this, inputVal); });
 
-  // Claude 추천 비동기 로드
   const existingKeys = (await getCached()) || MOCK_DB;
   const suggestions = await recommendKeysWithClaude(scr, inputVal, existingKeys);
   const loadingEl = document.getElementById('claude-loading');
@@ -1176,6 +1139,7 @@ async function renderResults(inputVal,results,thresh){
     }
   }
 }
+
 function selE(el,key,val,keyId){
   document.querySelectorAll('.card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');
   selKey=key;selVal=val;selExistingKeyId=keyId||null;selTags=[...(cardTags[el.id]||[])];
@@ -1183,6 +1147,7 @@ function selE(el,key,val,keyId){
   if(t&&!t.querySelector('.ftag-add'))t.innerHTML=renderFTags(cardTags[el.id],el.id,true);
   showConfirm(key,val);
 }
+
 function renderSuggestions(container, suggestions, inputVal) {
   container.innerHTML = '';
   suggestions.forEach(function(k) {
@@ -1198,17 +1163,14 @@ function renderSuggestions(container, suggestions, inputVal) {
 
 function selectSuggestion(key, val, event) {
   event.stopPropagation();
-  // 선택한 추천키를 직접입력란에 반영하고 confirm 표시
   const nki = document.getElementById('nki');
   if (nki) nki.value = key;
   selExistingKeyId = null;
   selKey = key; selVal = val; selTags = [...(cardTags['cn'] || [])];
-  // 카드 selected 처리
   document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
   const wrap = document.getElementById('cn-wrap');
   if (wrap) wrap.classList.add('selected');
   showConfirm(key, val);
-  // 선택된 항목 하이라이트
   event.currentTarget.style.borderColor = 'var(--text)';
   event.currentTarget.style.fontWeight = '500';
 }
@@ -1232,6 +1194,7 @@ function uCT(){
   const el=document.getElementById('c-tags');
   el.innerHTML=selTags.length?selTags.map(t=>{const i=parseFTag(t);return i?`<span class="ftag" title="${i.desc}">${i.label}<span style="opacity:.6;font-size:9px;margin-left:3px">${i.name} v${i.ver}</span></span>`:''}).join(''):`<span style="font-size:11px;color:var(--text-3)">Figma 화면 없음</span>`;
 }
+
 async function regKey(){
   if(!selKey)return;
   const btn=document.querySelector('#confirm-box .btn-p');
@@ -1246,6 +1209,7 @@ async function regKey(){
   }catch(e){showToast(`오류: ${e.message}`);}
   finally{btn.textContent=orig;btn.disabled=false;}
 }
+
 function cpKey(){
   if(!selKey)return;
   try{navigator.clipboard.writeText(selKey);}catch(e){const t=document.createElement('textarea');t.value=selKey;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);}
@@ -1276,23 +1240,20 @@ function doRename(){
 function showBadge(id){const el=document.getElementById(id);el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2000);}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
-// isComposing 체크: 한글 조합 중 Enter 오발동 방지
 document.getElementById('str-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)doSearch();});
 document.getElementById('new-screen').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)addScreen();});
 document.getElementById('fm-name').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing)addFeat();});
 document.getElementById('feat-num').addEventListener('input',renderPreview);
 document.getElementById('feat-ver').addEventListener('input',renderPreview);
 
-// ── 초기 렌더 (Figma 없이 브라우저에서 직접 열 때도 동작) ───────────────────
+// ── 초기화 ────────────────────────────────────────────────────────────────────
 async function initApp() {
   if (!IS_FIGMA) {
-    // 1) config.json에서 공유 설정 불러오기 (팀 공통)
     const remote = await fetchRemoteConfig();
     if (remote) {
       if (remote.featureMap) featureMap = remote.featureMap;
       if (remote.screenList) screenList = remote.screenList;
       if (remote.keyRules)   keyRules   = remote.keyRules;
-      // config.json에서 tolgee url/projectId 자동 적용 (팀 공통값)
       if (remote.tolgee) {
         if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
         if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
@@ -1303,11 +1264,9 @@ async function initApp() {
         if (remote.github.branch) localStorage.setItem('skt_gh_branch', remote.github.branch);
       }
     } else {
-      // config.json 실패 시 localStorage 폴백
       featureMap  = storageLoad('featureMap',  featureMap);
       screenList  = storageLoad('screenList',  screenList);
     }
-    // 2) API Key만 localStorage에서 (개인 보안값)
     const savedApiKey = localStorage.getItem('skt_tolgee_apikey') || '';
     tolgeeConfig.apiKey = savedApiKey;
     document.getElementById('cfg-url').value     = tolgeeConfig.url;
@@ -1315,12 +1274,10 @@ async function initApp() {
     document.getElementById('cfg-key').value     = savedApiKey;
     if (savedApiKey) _api = null;
 
-    // 3) Claude API Key 불러오기
     var claudeKey = '';
     try { claudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
     if (claudeKey) document.getElementById('claude-key').value = claudeKey;
 
-    // 4) GitHub 설정 불러오기 (token만 localStorage, 나머지는 config.json에서 이미 세팅됨)
     const gh = getGithubConfig();
     if (gh.token)  document.getElementById('gh-token').value  = gh.token;
     document.getElementById('gh-owner').value  = gh.owner  || '';
