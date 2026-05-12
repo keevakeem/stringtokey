@@ -801,16 +801,11 @@ class TolgeeAPI {
     return all;
   }
 
-  async createKey({keyName,translations={},tags=[]}) {
-    // translations 값은 문자열 직접 (객체 아님)
-    const translationsBody = {};
-    Object.entries(translations).forEach(([lang, text]) => {
-      translationsBody[lang] = text;  // ✅ 문자열 직접
-    });
+  async createKey({keyName, translations={}, tags=[]}) {
+    // 1단계: 키만 먼저 생성 (translations 없이)
     const body = {
       name: keyName,
-      translations: translationsBody,
-      tags: tags,  // 문자열 배열 직접
+      tags: tags,
     };
     const r = await this._fetch(
       `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
@@ -820,7 +815,21 @@ class TolgeeAPI {
       const e = await r.json().catch(() => ({}));
       throw new Error(JSON.stringify(e));
     }
-    return r.json();
+    const created = await r.json();
+
+    // 2단계: 번역 따로 등록 (PUT /v2/projects/:id/translations)
+    const langEntries = Object.entries(translations);
+    if (langEntries.length > 0 && created.id) {
+      const transBody = { key: keyName, translations: {} };
+      langEntries.forEach(([lang, text]) => {
+        transBody.translations[lang] = text;
+      });
+      await this._fetch(
+        `${this.baseUrl}/v2/projects/${this.projectId}/translations`,
+        { method: 'POST', body: JSON.stringify(transBody) }
+      );
+    }
+    return created;
   }
 
   async addTags(keyId, newTags=[]) {
