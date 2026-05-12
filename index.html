@@ -882,9 +882,12 @@ class TolgeeAPI{
       if(!r.ok)throw new Error(`Tolgee ${r.status}`);
       const d=await r.json();total=d.page?.totalPages||1;
       (d._embedded?.keys||[]).forEach(item=>{
-        const val=item.translations?.[lang]?.text||'';
+        const trans = item.translations?.[lang];
+        const val = trans?.text || '';
+        // untranslated 상태이거나 값이 없으면 빈 문자열로 처리
+        const isEmpty = !val || trans?.state === 'UNTRANSLATED';
         const figmaTags=(item.keyTags||[]).filter(t=>t.name.startsWith('figma:')).map(t=>t.name.replace('figma:',''));
-        all.push({key:item.keyName,val,figmaTags,usage:figmaTags.length||1,keyId:item.keyId});
+        all.push({key:item.keyName, val: isEmpty ? '' : val, figmaTags, usage:figmaTags.length||1, keyId:item.keyId});
       });
       page++;
     }
@@ -1437,15 +1440,18 @@ async function previewReplace() {
     let matchCount = 0;
 
     // targetKeys를 keyName → val 맵으로 변환
+    // val이 있는 경우만 맵에 포함 — 빈 번역은 제외
     const keyToTarget = {};
-    targetKeys.forEach(function(item) { if (item.val) keyToTarget[item.key] = item.val; });
+    targetKeys.forEach(function(item) {
+      if (item.val && item.val.trim()) keyToTarget[item.key] = item.val;
+    });
 
     bulkTexts.forEach(function(t) {
       // 레이어 이름이 Tolgee 키 목록에 존재하는지 직접 매칭
       const layerName = t.name || '';
       const toText = layerName ? keyToTarget[layerName] : null;
       const hasMatch = !!toText && toText !== t.characters;
-      const reason = !layerName ? '레이어명 없음' : !toText ? '키 없음' : '번역 없음';
+      const reason = !layerName ? '레이어명 없음' : !(layerName in keyToTarget) ? '키 없음' : '번역 없음';
 
       if (hasMatch) {
         replaceMap.push({ nodeId: t.id, fromText: t.characters, newText: toText });
