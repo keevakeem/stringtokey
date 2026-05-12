@@ -188,10 +188,23 @@ select{cursor:pointer}
     <div class="lbl" style="margin:0">Tolgee 연결</div>
     <span class="saved-badge" id="tolgee-saved">저장됨</span>
   </div>
-  <div style="margin-bottom:8px"><div class="lbl" style="margin-bottom:4px">API URL</div><input type="text" id="cfg-url" placeholder="https://app.tolgee.io"></div>
-  <div class="row">
-    <div><div class="lbl" style="margin-bottom:4px">Project ID</div><input type="text" id="cfg-project" placeholder="12345"></div>
-    <div><div class="lbl" style="margin-bottom:4px">API Key</div><input type="text" id="cfg-key" placeholder="tgpak_..." style="font-family:var(--mono);font-size:11px"></div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">
+    URL·Project ID는 <strong>config.json</strong>에서 자동으로 불러와요.<br>
+    API Key만 개인별로 한 번 입력하면 저장돼요.
+  </div>
+  <div class="row" style="margin-bottom:8px">
+    <div>
+      <div class="lbl" style="margin-bottom:4px">API URL <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
+      <input type="text" id="cfg-url" disabled style="background:var(--bg);color:var(--text-3);cursor:default">
+    </div>
+    <div>
+      <div class="lbl" style="margin-bottom:4px">Project ID <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
+      <input type="text" id="cfg-project" disabled style="background:var(--bg);color:var(--text-3);cursor:default">
+    </div>
+  </div>
+  <div style="margin-bottom:10px">
+    <div class="lbl" style="margin-bottom:4px">API Key <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(개인 입력)</span></div>
+    <input type="text" id="cfg-key" placeholder="tgpak_..." style="font-family:var(--mono);font-size:11px">
   </div>
   <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
     <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveTolgee()">저장</button>
@@ -388,13 +401,25 @@ function handleFigmaMsg(msg) {
     case 'init':
       if (msg.featureMap) featureMap = msg.featureMap;
       if (msg.screenList) screenList = msg.screenList;
-      if (msg.tolgeeConfig) {
-        tolgeeConfig = msg.tolgeeConfig;
-        document.getElementById('cfg-url').value = tolgeeConfig.url || '';
+      // Figma 환경에서도 config.json에서 url/projectId 불러오기
+      fetchRemoteConfig().then(remote => {
+        if (remote) {
+          if (remote.featureMap) featureMap = remote.featureMap;
+          if (remote.screenList) screenList = remote.screenList;
+          if (remote.tolgee) {
+            if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
+            if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
+          }
+          renderScreenSelect(); renderScreenList(); renderFeatMap();
+        }
+        // API Key는 clientStorage에서 (Figma) 또는 localStorage에서 (브라우저)
+        const savedKey = msg.tolgeeConfig?.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
+        tolgeeConfig.apiKey = savedKey;
+        document.getElementById('cfg-url').value     = tolgeeConfig.url || '';
         document.getElementById('cfg-project').value = tolgeeConfig.projectId || '';
-        document.getElementById('cfg-key').value = tolgeeConfig.apiKey || '';
-        _api = null;
-      }
+        document.getElementById('cfg-key').value     = savedKey;
+        if (savedKey) _api = null;
+      });
       renderScreenSelect(); renderScreenList(); renderFeatMap();
       applySelection(msg);
       break;
@@ -529,11 +554,14 @@ async function syncFromGithub() {
 }
 
 function saveTolgee() {
-  tolgeeConfig={url:document.getElementById('cfg-url').value.trim(),projectId:document.getElementById('cfg-project').value.trim(),apiKey:document.getElementById('cfg-key').value.trim()};
-  _api=null;_cache=null;_cacheTime=0;
-  storageSave('tolgeeConfig', tolgeeConfig);
-  if (IS_FIGMA) toFigma({ type:'save-tolgee-config', config:tolgeeConfig });
-  else showBadge('tolgee-saved');
+  // url/projectId는 config.json에서 관리 — API Key만 저장
+  const apiKey = document.getElementById('cfg-key').value.trim();
+  tolgeeConfig.apiKey = apiKey;
+  _api = null; _cache = null; _cacheTime = 0;
+  // API Key는 localStorage에 저장 (Figma/브라우저 공통)
+  try { localStorage.setItem('skt_tolgee_apikey', apiKey); } catch(e) {}
+  if (IS_FIGMA) toFigma({ type:'save-tolgee-config', config: tolgeeConfig });
+  showBadge('tolgee-saved');
 }
 async function testTolgee() {
   saveTolgee();
@@ -823,17 +851,23 @@ async function initApp() {
     if (remote) {
       if (remote.featureMap) featureMap = remote.featureMap;
       if (remote.screenList) screenList = remote.screenList;
+      // config.json에서 tolgee url/projectId 자동 적용 (팀 공통값)
+      if (remote.tolgee) {
+        if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
+        if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
+      }
     } else {
       // config.json 실패 시 localStorage 폴백
       featureMap  = storageLoad('featureMap',  featureMap);
       screenList  = storageLoad('screenList',  screenList);
     }
-    // 2) 개인 설정 (tolgee, github token)은 localStorage
-    tolgeeConfig = storageLoad('tolgeeConfig', tolgeeConfig);
-    if (tolgeeConfig.url)       document.getElementById('cfg-url').value     = tolgeeConfig.url;
-    if (tolgeeConfig.projectId) document.getElementById('cfg-project').value = tolgeeConfig.projectId;
-    if (tolgeeConfig.apiKey)    document.getElementById('cfg-key').value     = tolgeeConfig.apiKey;
-    if (tolgeeConfig.apiKey)    _api = null;
+    // 2) API Key만 localStorage에서 (개인 보안값)
+    const savedApiKey = localStorage.getItem('skt_tolgee_apikey') || '';
+    tolgeeConfig.apiKey = savedApiKey;
+    document.getElementById('cfg-url').value     = tolgeeConfig.url;
+    document.getElementById('cfg-project').value = tolgeeConfig.projectId;
+    document.getElementById('cfg-key').value     = savedApiKey;
+    if (savedApiKey) _api = null;
 
     // 3) GitHub 설정 불러오기
     const gh = getGithubConfig();

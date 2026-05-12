@@ -14,5 +14,9 @@
     "settings",
     "payment",
     "search"
-  ]
+  ],
+  "tolgee": {
+    "url": "https://dev-global.kakaohealthcare.com",
+    "projectId": "3"
+  }
 }
