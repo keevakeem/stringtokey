@@ -675,7 +675,7 @@ async function renderBulkList() {
     // layerContext를 각 텍스트의 context로 설정
     layerContext = t.context || null;
     var candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
-    var suggestedKey = candidates[0] ? candidates[0].replace('  ⚠️ 이미 존재', '') : genKey(scr, t.characters);
+    var suggestedKey = candidates[0] ? (typeof candidates[0] === 'object' ? candidates[0].key : candidates[0]) : genKey(scr, t.characters);
     items.push({ text: t.characters, key: suggestedKey, idx: i });
   }
   layerContext = null;
@@ -1044,9 +1044,10 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
 
 // 중복 키 체크 후 표시
 function withDupeCheck(candidates, existingKeys) {
+  // 키값 자체는 순수하게 유지, 중복 여부는 data 속성으로 표현
   return candidates.map(function(k) {
     var exists = existingKeys.some(function(item) { return item.key === k; });
-    return exists ? k + '  ⚠️ 이미 존재' : k;
+    return { key: k, exists: exists };
   });
 }
 
@@ -1252,9 +1253,10 @@ async function renderResults(inputVal,results,thresh){
     suggestEl.style.display = 'block';
     renderSuggestions(suggestEl, suggestions, inputVal);
     if (suggestions[0]) {
+      const firstKey = typeof suggestions[0] === 'object' ? suggestions[0].key : suggestions[0];
       const nki = document.getElementById('nki');
-      if (nki) nki.value = suggestions[0];
-      selKey = suggestions[0];
+      if (nki) nki.value = firstKey;
+      selKey = firstKey;
     }
   }
 }
@@ -1267,10 +1269,21 @@ function selE(el,key,val,keyId){
 }
 function renderSuggestions(container, suggestions, inputVal) {
   container.innerHTML = '';
-  suggestions.forEach(function(k) {
+  suggestions.forEach(function(item) {
+    // item은 { key, exists } 또는 문자열 (하위 호환)
+    var k = typeof item === 'object' ? item.key : item;
+    var exists = typeof item === 'object' ? item.exists : false;
     const div = document.createElement('div');
-    div.style.cssText = 'font-family:var(--mono);font-size:11px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer;transition:border-color .15s';
-    div.textContent = k;
+    div.style.cssText = 'font-family:var(--mono);font-size:11px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;cursor:pointer;transition:border-color .15s;display:flex;align-items:center;justify-content:space-between;gap:6px';
+    const keySpan = document.createElement('span');
+    keySpan.textContent = k;
+    div.appendChild(keySpan);
+    if (exists) {
+      const badge = document.createElement('span');
+      badge.textContent = '이미 존재';
+      badge.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:20px;background:var(--amber-bg);color:var(--amber);white-space:nowrap;flex-shrink:0';
+      div.appendChild(badge);
+    }
     div.addEventListener('mouseover', function() { this.style.borderColor = 'var(--border-strong)'; });
     div.addEventListener('mouseout',  function() { this.style.borderColor = 'var(--border)'; });
     div.addEventListener('click', function(e) { selectSuggestion(k, inputVal, e); });
@@ -1317,7 +1330,7 @@ function uCT(){
 async function regKey(){
   if(!selKey)return;
   // 등록 시점에 값을 로컬 변수로 고정 — 비동기 처리 중 selKey가 변경되어도 안전
-  const keyToRegister = selKey;
+  const keyToRegister = selKey.replace(/\s*⚠️.*$/, '').trim(); // 중복 표시 suffix 제거
   const valToRegister = selVal;
   const tagsToRegister = selTags.slice();
   const existingId = selExistingKeyId;
