@@ -802,31 +802,25 @@ class TolgeeAPI {
   }
 
 async createKey({ keyName, translations = {}, tags = [] }) {
-  // 1) 실제 에러 메시지 확인용 로그 추가
   const translationsBody = {};
   Object.entries(translations).forEach(([lang, text]) => {
-    // Tolgee v2: text는 문자열 직접 (객체 아님)
-    translationsBody[lang] = text;
+    // ❌ 기존: translationsBody[lang] = { text };
+    translationsBody[lang] = text;  // ✅ 문자열 직접
   });
 
   const body = {
     name: keyName,
     translations: translationsBody,
-    tags: tags,   // 문자열 배열 그대로
+    tags: tags,
   };
-
-  console.log('createKey body:', JSON.stringify(body));  // 확인용
 
   const r = await this._fetch(
     `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
     { method: 'POST', body: JSON.stringify(body) }
   );
-
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
-    // 에러 전체를 보여주도록 수정
-    console.error('Tolgee 400 detail:', JSON.stringify(e));
-    throw new Error(JSON.stringify(e));  // ← 전체 에러 객체 노출
+    throw new Error(JSON.stringify(e));
   }
   return r.json();
 }
