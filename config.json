@@ -17,11 +17,16 @@
   ],
   "tolgee": {
     "url": "https://dev-global.kakaohealthcare.com",
-    "projectId": "3"
+    "projectId": "3",
+    "langs": [
+      "ko-KR",
+      "en-US",
+      "ja-JP"
+    ]
   },
   "github": {
-    "owner": "keevakeem",
-    "repo": "stringtokey",
+    "owner": "your-username",
+    "repo": "string-key-tool",
     "branch": "main"
   },
   "keyRules": {

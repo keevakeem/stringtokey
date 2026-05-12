@@ -454,7 +454,7 @@ let keyRules = {
   }
 };
 let screenList = ['common','onboarding','home','profile','settings','payment','search'];
-let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',lang:'ko-KR'};
+let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',langs:['ko-KR','en','ja']};
 let selectedFrames = [];
 let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
 let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
@@ -498,6 +498,7 @@ function handleFigmaMsg(msg) {
           if (remote.tolgee) {
             if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
             if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
+            if (remote.tolgee.langs)     tolgeeConfig.langs     = remote.tolgee.langs;
           }
           if (remote.github) {
             if (remote.github.owner)  localStorage.setItem('skt_gh_owner',  remote.github.owner);
@@ -653,7 +654,7 @@ async function registerBulkItem(idx) {
   var api = getApi();
   try {
     if (api) {
-      await api.registerKey({ keyName: keyEl.value.trim(), val: bulkTexts[idx].characters, lang: 'ko-KR', figmaTags: [], existingKeyId: null });
+      await api.registerKey({ keyName: keyEl.value.trim(), val: bulkTexts[idx].characters, figmaTags: [], existingKeyId: null });
       _cache = null;
     }
     itemEl.classList.add('done');
@@ -818,7 +819,7 @@ class TolgeeAPI{
     });
   }
 
-  async fetchAllKeys({lang='ko-KR',pageSize=200}={}){
+  async fetchAllKeys({pageSize=200}={}){ const lang=(tolgeeConfig.langs&&tolgeeConfig.langs[0])||'ko-KR';
     let page=0,all=[],total=1;
     while(page<total){
       const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${page}`,{headers:this.hdr});
@@ -872,12 +873,16 @@ class TolgeeAPI{
     if (!p.ok) throw new Error('태그 업데이트 실패: ' + p.status);
     return p.json();
   }
-  async registerKey({keyName,val,lang='ko-KR',figmaTags=[],existingKeyId=null}){
-    const tags=['lint:passed',...figmaTags.map(t=>`figma:${t}`)];
+  async registerKey({keyName,val,figmaTags=[],existingKeyId=null}){
+    const tags=['lint:passed',...figmaTags.map(function(t){return 'figma:'+t;})];
     if(existingKeyId){await this.addTags(existingKeyId,tags);return{type:'tag-added',keyName};}
-    const r=await this.createKey({keyName,translations:{[lang]:val},tags});
+    const langs=tolgeeConfig.langs&&tolgeeConfig.langs.length?tolgeeConfig.langs:['ko-KR'];
+    const translations={};
+    langs.forEach(function(l,i){translations[l]=i===0?val:'';});
+    const r=await this.createKey({keyName,translations,tags});
     return{type:'created',keyName,keyId:r.id};
   }
+
   async test(){const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}`,{headers:this.hdr});if(!r.ok)throw new Error(String(r.status));return r.json();}
 }
 function getApi(){
@@ -1248,7 +1253,7 @@ async function regKey(){
   const a=getApi();
   try{
     if(a){
-      await a.registerKey({keyName:selKey,val:selVal,lang:'ko-KR',figmaTags:selTags,existingKeyId:selExistingKeyId});
+      await a.registerKey({keyName:selKey,val:selVal,figmaTags:selTags,existingKeyId:selExistingKeyId});
       _cache=null;showToast(`✓ "${selKey}" Tolgee에 등록됐어요`);
       toFigma({type:'notify',message:`키 등록: ${selKey}`});
     }else{showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요');}
@@ -1305,6 +1310,7 @@ async function initApp() {
       if (remote.tolgee) {
         if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
         if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
+        if (remote.tolgee.langs)     tolgeeConfig.langs     = remote.tolgee.langs;
       }
       if (remote.github) {
         if (remote.github.owner)  localStorage.setItem('skt_gh_owner',  remote.github.owner);
