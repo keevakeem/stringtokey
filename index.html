@@ -571,17 +571,42 @@ class TolgeeAPI{
     return all;
   }
   async createKey({keyName,translations={},tags=[]}){
-    const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/create`,{method:'POST',headers:this.hdr,body:JSON.stringify({name:keyName,translations,tags:tags.map(n=>({name:n}))})});
-    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.message||`키 생성 실패: ${r.status}`);}
+    // Tolgee v2: POST /v2/projects/{id}/keys
+    // body: { name, translations: { ko: { text: '...' } }, tags: [{ name: '...' }] }
+    const translationsBody = {};
+    Object.entries(translations).forEach(([lang, text]) => {
+      translationsBody[lang] = { text };
+    });
+    const body = {
+      name: keyName,
+      translations: translationsBody,
+      tags: tags.map(n => ({ name: n })),
+    };
+    const r = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys`, {
+      method: 'POST',
+      headers: this.hdr,
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.message || '키 생성 실패: ' + r.status);
+    }
     return r.json();
   }
   async addTags(keyId,newTags=[]){
-    const g=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`,{headers:this.hdr});
-    if(!g.ok)throw new Error('키 조회 실패');
-    const kd=await g.json();
-    const merged=[...new Set([...(kd.tags||[]).map(t=>t.name),...newTags])];
-    const p=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}/tags`,{method:'PUT',headers:this.hdr,body:JSON.stringify({tags:merged.map(n=>({name:n}))})});
-    if(!p.ok)throw new Error('태그 업데이트 실패');
+    // 현재 키 정보 조회
+    const g = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, { headers: this.hdr });
+    if (!g.ok) throw new Error('키 조회 실패: ' + g.status);
+    const kd = await g.json();
+    const existingTags = (kd.tags || []).map(t => t.name);
+    const merged = [...new Set([...existingTags, ...newTags])];
+    // PATCH /v2/projects/{id}/keys/{keyId} 로 태그 업데이트
+    const p = await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`, {
+      method: 'PATCH',
+      headers: this.hdr,
+      body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }),
+    });
+    if (!p.ok) throw new Error('태그 업데이트 실패: ' + p.status);
     return p.json();
   }
   async registerKey({keyName,val,lang='ko',figmaTags=[],existingKeyId=null}){
