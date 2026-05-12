@@ -227,6 +227,26 @@ select{cursor:pointer}
 
 <script>
 // ── 상태 ──────────────────────────────────────────────────────────────────────
+// ── Storage 유틸 (Figma = clientStorage 경유, 브라우저 = localStorage) ──────
+const IS_FIGMA = window.parent !== window;  // iframe 안이면 Figma 환경
+
+function storageSave(key, value) {
+  if (IS_FIGMA) {
+    // Figma: ui.html → code.js → clientStorage
+    toFigma({ type: 'save-storage', key, value: JSON.stringify(value) });
+  } else {
+    try { localStorage.setItem('skt_' + key, JSON.stringify(value)); } catch(e) {}
+  }
+}
+
+function storageLoad(key, fallback) {
+  if (IS_FIGMA) return fallback; // Figma는 init 메시지로 받음
+  try {
+    const v = localStorage.getItem('skt_' + key);
+    return v ? JSON.parse(v) : fallback;
+  } catch(e) { return fallback; }
+}
+
 let featureMap = {'1':'회원가입','2':'홈 피드','3':'온보딩','4':'프로필','5':'결제'};
 let screenList = ['common','onboarding','home','profile','settings','payment','search'];
 let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:''};
@@ -275,8 +295,9 @@ function handleFigmaMsg(msg) {
       applySelection(msg);
       break;
     case 'saved':
-      if (msg.key === 'featureMap') showBadge('screen-saved'), showBadge('feat-saved');
+      if (msg.key === 'featureMap') { showBadge('screen-saved'); showBadge('feat-saved'); }
       if (msg.key === 'tolgeeConfig') showBadge('tolgee-saved');
+      if (msg.key === 'storage') { /* 범용 저장 완료 */ }
       break;
     case 'rename-done':
       document.getElementById('rename-list').innerHTML =
@@ -368,14 +389,18 @@ function rmFeat(k) { delete featureMap[k]; renderFeatMap(); saveFeatureMap(); }
 
 // clientStorage 저장 (code.js 경유)
 function saveFeatureMap() {
-  toFigma({ type:'save-feature-map', featureMap, screenList });
+  storageSave('featureMap', featureMap);
+  storageSave('screenList', screenList);
+  if (IS_FIGMA) toFigma({ type:'save-feature-map', featureMap, screenList });
 }
 
 // ── Tolgee 설정 ───────────────────────────────────────────────────────────────
 function saveTolgee() {
   tolgeeConfig={url:document.getElementById('cfg-url').value.trim(),projectId:document.getElementById('cfg-project').value.trim(),apiKey:document.getElementById('cfg-key').value.trim()};
   _api=null;_cache=null;_cacheTime=0;
-  toFigma({ type:'save-tolgee-config', config:tolgeeConfig });
+  storageSave('tolgeeConfig', tolgeeConfig);
+  if (IS_FIGMA) toFigma({ type:'save-tolgee-config', config:tolgeeConfig });
+  else showBadge('tolgee-saved');
 }
 async function testTolgee() {
   saveTolgee();
@@ -616,6 +641,16 @@ document.getElementById('feat-num').addEventListener('input',renderPreview);
 document.getElementById('feat-ver').addEventListener('input',renderPreview);
 
 // ── 초기 렌더 (Figma 없이 브라우저에서 직접 열 때도 동작) ───────────────────
+if (!IS_FIGMA) {
+  // 브라우저 직접 접근 시 localStorage에서 불러오기
+  featureMap  = storageLoad('featureMap',  featureMap);
+  screenList  = storageLoad('screenList',  screenList);
+  tolgeeConfig = storageLoad('tolgeeConfig', tolgeeConfig);
+  if (tolgeeConfig.url)     document.getElementById('cfg-url').value     = tolgeeConfig.url;
+  if (tolgeeConfig.projectId) document.getElementById('cfg-project').value = tolgeeConfig.projectId;
+  if (tolgeeConfig.apiKey)  document.getElementById('cfg-key').value     = tolgeeConfig.apiKey;
+  if (tolgeeConfig.apiKey) _api = null; // 다음 검색 시 재생성
+}
 renderScreenSelect(); renderScreenList(); renderFeatMap();
 </script>
 </body>
