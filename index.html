@@ -331,8 +331,8 @@ select{cursor:pointer}
       <div style="font-size:12px;color:var(--text-3)">다크 모드가 기본값이에요</div>
     </div>
     <div style="display:flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px">
-      <button id="theme-dark" onclick="setTheme('dark')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:var(--btn-bg);color:var(--on-btn);font-family:var(--sans)">다크</button>
-      <button id="theme-light" onclick="setTheme('light')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:transparent;color:var(--text-3);font-family:var(--sans)">라이트</button>
+      <button id="theme-dark" onclick="setTheme('dark')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:transparent;color:var(--text-3);font-family:var(--sans)">다크</button>
+      <button id="theme-light" onclick="setTheme('light')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:var(--btn-bg);color:var(--on-btn);font-family:var(--sans)">라이트</button>
     </div>
   </div>
   <div class="divider"></div>
@@ -1854,7 +1854,7 @@ function setTheme(mode) {
 async function initApp() {
   // 저장된 테마 복원
   try {
-    var savedTheme = localStorage.getItem('skt_theme') || 'dark';
+    var savedTheme = localStorage.getItem('skt_theme') || 'light';
     setTheme(savedTheme);
   } catch(e) {}
 
