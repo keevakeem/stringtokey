@@ -1696,48 +1696,32 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
         var blob = new Blob([bytes], {type:'image/png'});
 
-        // Step 1: POST /v2/image-upload (multipart, field: image)
-        var formData1 = new FormData();
-        formData1.append('image', blob, (frameName||'screenshot')+'.png');
-        var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
-          method:'POST', credentials:'omit',
-          headers:{'X-API-Key':api.apiKey},
-          body:formData1,
-        });
-        console.log('[SKT] image-upload status:', uploadRes.status);
-        if (!uploadRes.ok) {
-          var eu = await uploadRes.json().catch(function(){return {};});
-          throw new Error('이미지 업로드 실패: '+uploadRes.status+' '+JSON.stringify(eu));
-        }
-        var uploadData = await uploadRes.json();
-        console.log('[SKT] image-upload response:', JSON.stringify(uploadData));
-        var imageUploadId = uploadData.id;
-
-        // Step 2: POST /v2/projects/{id}/keys/{keyId}/screenshots (JSON)
-        // keypointPositions로 텍스트 위치 하이라이트 전달
+        // POST /v2/projects/:id/keys/:keyId/screenshots (multipart)
+        // 키 위치 정보를 JSON으로 같이 전송
         var keyPositions = msg.keyPositions || [];
         var thisKeyPos = keyPositions.find(function(p) { return p.key === keyName; });
-        var linkBody = { uploadedImageId: imageUploadId };
+
+        var formData1 = new FormData();
+        formData1.append('screenshot', blob, (frameName||'screenshot')+'.png');
         if (thisKeyPos) {
-          linkBody.keypointPositions = [{
-            x: thisKeyPos.x,
-            y: thisKeyPos.y,
-            width: thisKeyPos.width,
-            height: thisKeyPos.height,
-          }];
+          formData1.append('positions', JSON.stringify([{
+            x: thisKeyPos.x, y: thisKeyPos.y,
+            width: thisKeyPos.width, height: thisKeyPos.height,
+          }]));
         }
+
         var linkRes = await fetch(
           api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
           {
             method:'POST', credentials:'omit',
-            headers:{'X-API-Key':api.apiKey,'Content-Type':'application/json'},
-            body:JSON.stringify(linkBody),
+            headers:{'X-API-Key':api.apiKey},
+            body:formData1,
           }
         );
-        console.log('[SKT] key-screenshot link status:', linkRes.status);
+        console.log('[SKT] screenshot upload status:', linkRes.status);
         if (!linkRes.ok) {
           var e2 = await linkRes.json().catch(function(){return {};});
-          throw new Error('키 연결 실패: '+linkRes.status+' '+JSON.stringify(e2));
+          throw new Error('스크린샷 업로드 실패: '+linkRes.status+' '+JSON.stringify(e2));
         }
         showToast('✓ 스크린샷 첨부 완료');
       } catch(e) {
