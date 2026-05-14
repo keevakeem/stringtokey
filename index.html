@@ -517,6 +517,7 @@ let selectedFrames = [];
 let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
 let currentTextNodeId = null; // 현재 선택된 텍스트 레이어 ID (레이어 이름 변경용)
 let currentTopFrameNames = []; // 선택된 객체들의 최상위 프레임 이름 목록 (Figma 화면 태그용)
+let currentTopFrameId = null;  // 스크린샷용 최상위 프레임 ID
 let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
 let bulkMode = false;   // 일괄 모드 여부
 let cardTags = {};
@@ -642,6 +643,7 @@ function applySelection(msg) {
     layerContext = texts[0].context || null;
     currentTextNodeId = texts[0].id || null;
     currentTopFrameNames = msg.topFrameNames || (texts[0].topFrameName ? [texts[0].topFrameName] : []);
+    currentTopFrameId = texts[0].topFrameId || null;
     // hint-box에 nodeId 저장 — 검색 후에도 유지
     document.getElementById('hint-box').dataset.nodeId = texts[0].id || '';
     // 프레임 이름 힌트 표시
@@ -652,8 +654,8 @@ function applySelection(msg) {
     hint.style.display = 'none';
     layerContext = null;
     currentTextNodeId = null;
-    // 텍스트 선택 없어도 topFrameNames는 msg에서 가져옴
     currentTopFrameNames = msg.topFrameNames || [];
+    currentTopFrameId = null;
   }
 
   // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
@@ -1515,10 +1517,15 @@ async function regKey(){
       } else if(renameChk && renameChk.checked) {
         showToast('레이어 이름 변경 실패 — 텍스트 레이어를 먼저 선택해주세요');
       }
-      // 스크린샷 첨부 (체크박스 + 프레임 선택 시)
+      // 스크린샷 첨부 (체크박스 확인)
       var screenshotChk = document.getElementById('screenshot-chk');
-      if (IS_FIGMA && screenshotChk && screenshotChk.checked && selectedFrames.length > 0) {
-        await uploadScreenshotForKey(a, keyToRegister);
+      if (IS_FIGMA && screenshotChk && screenshotChk.checked) {
+        // selectedFrames 우선, 없으면 텍스트의 최상위 프레임 ID 사용
+        var ssFrameId = selectedFrames.length ? selectedFrames[0].id : currentTopFrameId;
+        var ssFrameName = selectedFrames.length ? selectedFrames[0].name : (currentTopFrameNames[0] || keyToRegister);
+        if (ssFrameId) {
+          await uploadScreenshotForKey(a, keyToRegister, ssFrameId, ssFrameName);
+        }
       }
       toFigma({type:'notify',message:'키 등록: ' + keyToRegister});
     }else{showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요');}
@@ -1576,8 +1583,11 @@ function handleScreenshotReady(msg) {
   }
 }
 
-async function uploadScreenshotForKey(api, keyName) {
-  if (!selectedFrames.length) return;
+async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFrameName) {
+  // overrideFrameId가 있으면 우선 사용, 없으면 selectedFrames[0]
+  var frameId = overrideFrameId || (selectedFrames.length ? selectedFrames[0].id : null);
+  var frameName = overrideFrameName || (selectedFrames.length ? selectedFrames[0].name : keyName);
+  if (!frameId) { console.warn('[SKT] 스크린샷: frameId 없음'); return; }
   var cached = (_cache||[]).find(function(item){return item.key===keyName;});
   if (!cached||!cached.keyId) {
     try{_cache=await api.fetchAllKeys();_cacheTime=Date.now();cached=_cache.find(function(item){return item.key===keyName;});}catch(e){}
@@ -1585,11 +1595,10 @@ async function uploadScreenshotForKey(api, keyName) {
   if (!cached||!cached.keyId) { console.warn('스크린샷: keyId 없음', keyName); return; }
 
   var keyId = cached.keyId;
-  var frame = selectedFrames[0];
 
   // Promise로 감싸서 await가 완료될 때까지 대기
   return new Promise(function(resolve) {
-    toFigma({type:'export-screenshot', frameId:frame.id});
+    toFigma({type:'export-screenshot', frameId:frameId});
     window._screenshotCallback = async function(msg) {
       window._screenshotCallback = null;
       try {
@@ -1600,7 +1609,7 @@ async function uploadScreenshotForKey(api, keyName) {
 
         // Step 1: POST /v2/image-upload
         var formData1 = new FormData();
-        formData1.append('image', blob, (frame.name||'screenshot')+'.png');
+        formData1.append('image', blob, (frameName||'screenshot')+'.png');
         var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
           method:'POST', credentials:'omit',
           headers:{'X-API-Key':api.apiKey},
