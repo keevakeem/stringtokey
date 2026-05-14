@@ -12,7 +12,7 @@
   "screenList": [
     "common",
     "signup", "onboarding", "billing", "home", "plan", 
-    "record.insulin", "record.workout",
+    "record.common","record.insulin", "record.workout",
      "insight", "reports", "settings"
   ],
   "tolgee": {
