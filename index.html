@@ -136,7 +136,6 @@ select{cursor:pointer}
 <div class="tabs">
   <button class="tab active" onclick="sw('keys')">🔑 문자열 키</button>
   <button class="tab figma-only" onclick="sw('replace')" style="display:none">🌐 언어 교체</button>
-  <button class="tab figma-only" onclick="sw('screenshot')" style="display:none">📸 스크린샷</button>
   <button class="tab figma-only" onclick="sw('rename')" style="display:none">✏️ 프레임 이름</button>
   <button class="tab" onclick="sw('settings')">⚙️ 설정</button>
 </div>
@@ -183,9 +182,13 @@ select{cursor:pointer}
     <div class="key-mono" id="c-key"></div>
     <div class="val-t" id="c-val"></div>
     <div class="ftags figma-only" id="c-tags" style="display:none;margin-bottom:8px"></div>
-    <label class="figma-only" style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:8px;cursor:pointer">
+    <label class="figma-only" style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:6px;cursor:pointer">
       <input type="checkbox" id="rename-layer-chk" checked style="accent-color:var(--text)">
       등록 후 레이어 이름을 키값으로 변경
+    </label>
+    <label class="figma-only" style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--text-2);margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="screenshot-chk" checked style="accent-color:var(--text)">
+      현재 프레임 스크린샷을 키에 첨부
     </label>
     <div class="ac-row">
       <button class="btn-p" onclick="regKey()">Tolgee 등록</button>
@@ -231,25 +234,6 @@ select{cursor:pointer}
     <button class="btn-p" id="replace-btn" onclick="doReplace()" style="display:none">
       ✓ 교체 적용
     </button>
-  </div>
-</div>
-
-<!-- ══ 스크린샷 ══ -->
-<div class="tab-panel" id="tab-screenshot">
-  <div class="info-box">
-    선택한 프레임을 <strong>PNG로 캡처</strong>해서 Tolgee에 업로드해요.<br>
-    레이어 이름이 키값인 텍스트는 <strong>자동으로 위치가 연결</strong>돼요.
-  </div>
-
-  <div id="screenshot-no-sel" class="no-sel">Figma 캔버스에서<br>프레임을 선택해주세요</div>
-
-  <div id="screenshot-content" style="display:none">
-    <div class="lbl" style="margin-bottom:6px">선택된 프레임</div>
-    <div id="screenshot-frame-list" style="margin-bottom:12px"></div>
-    <button class="btn-p" id="screenshot-btn" onclick="doScreenshot()">
-      📸 스크린샷 찍고 Tolgee에 업로드
-    </button>
-    <div id="screenshot-result" style="margin-top:12px"></div>
   </div>
 </div>
 
@@ -627,10 +611,6 @@ function applySelection(msg) {
   document.getElementById('replace-preview').innerHTML = '';
   document.getElementById('replace-btn').style.display = 'none';
 
-  // 스크린샷 탭 프레임 감지
-  document.getElementById('screenshot-no-sel').style.display = hasSel ? 'none' : 'block';
-  document.getElementById('screenshot-content').style.display = hasSel ? 'block' : 'none';
-  if (hasSel) renderScreenshotFrameList();
 
   // 텍스트 노드 힌트 (문자열 키 탭)
   const texts = msg.texts || [];
@@ -772,7 +752,7 @@ async function refreshBulk() {
 
 function sw(t) {
   document.querySelectorAll('.tab').forEach(function(el) {
-    const tabs = ['keys','replace','screenshot','rename','settings'];
+    const tabs = ['keys','replace','rename','settings'];
     const idx = Array.from(document.querySelectorAll('.tab')).indexOf(el);
     el.classList.toggle('active', tabs[idx] === t);
   });
@@ -1504,131 +1484,34 @@ document.getElementById('feat-ver').addEventListener('input',renderPreview);
 // ── 초기 렌더 (Figma 없이 브라우저에서 직접 열 때도 동작) ───────────────────
 // ── 언어 교체 탭 ─────────────────────────────────────────────────────────────
 
-// ── 스크린샷 탭 ──────────────────────────────────────────────────────────────
-
-let screenshotQueue = []; // 업로드 대기 중인 프레임 목록
-
-function renderScreenshotFrameList() {
-  var list = document.getElementById('screenshot-frame-list');
-  if (!selectedFrames.length) { list.innerHTML = ''; return; }
-  list.innerHTML = selectedFrames.map(function(f) {
-    return '<div class="frame-item"><span class="frame-num">📄</span><span class="frame-name">' + f.name + '</span></div>';
-  }).join('');
-}
-
-async function doScreenshot() {
-  if (!selectedFrames.length) { showToast('프레임을 선택해주세요'); return; }
-  var api = getApi();
-  if (!api) { showToast('Tolgee API 설정을 먼저 해주세요'); return; }
-
-  var btn = document.getElementById('screenshot-btn');
-  var result = document.getElementById('screenshot-result');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="ld"><span></span><span></span><span></span></span> 스크린샷 업로드 중...';
-  result.innerHTML = '';
-
-  screenshotQueue = selectedFrames.slice();
-  processNextScreenshot(api, result, btn);
-}
-
-function processNextScreenshot(api, result, btn) {
-  if (!screenshotQueue.length) {
-    btn.disabled = false;
-    btn.innerHTML = '📸 스크린샷 찍고 Tolgee에 업로드';
-    return;
+// ── 키 등록 시 스크린샷 업로드 ──────────────────────────────────────────────────
+async function uploadScreenshotForKey(api, keyName) {
+  if (!selectedFrames.length) return;
+  var cached = (_cache||[]).find(function(item){return item.key===keyName;});
+  if (!cached||!cached.keyId) {
+    try{_cache=await api.fetchAllKeys();_cacheTime=Date.now();cached=_cache.find(function(item){return item.key===keyName;});}catch(e){}
   }
-  var frame = screenshotQueue.shift();
-  toFigma({ type: 'export-screenshot', frameId: frame.id });
-  // handleScreenshotReady에서 계속 처리
-  window._screenshotCallback = function(msg) {
-    uploadScreenshot(api, msg, result, frame.name).then(function() {
-      processNextScreenshot(api, result, btn);
-    });
-  };
-}
-
-function handleScreenshotReady(msg) {
-  if (window._screenshotCallback) {
-    window._screenshotCallback(msg);
-    window._screenshotCallback = null;
-  }
-}
-
-async function uploadScreenshot(api, msg, resultEl, frameName) {
-  try {
-    // Base64 → Blob
-    var binary = atob(msg.base64);
-    var bytes = new Uint8Array(binary.length);
-    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    var blob = new Blob([bytes], { type: 'image/png' });
-
-    // 1. 스크린샷 업로드
-    var formData = new FormData();
-    formData.append('image', blob, (frameName || 'screenshot') + '.png');
-
-    var uploadRes = await fetch(
-      api.baseUrl + '/v2/projects/' + api.projectId + '/screenshots',
-      {
-        method: 'POST',
-        credentials: 'omit',
-        headers: { 'X-API-Key': api.apiKey },
-        body: formData,
-      }
-    );
-    if (!uploadRes.ok) {
-      var e = await uploadRes.json().catch(function() { return {}; });
-      throw new Error('업로드 실패: ' + (e.message || uploadRes.status));
-    }
-    var uploadData = await uploadRes.json();
-    var screenshotId = uploadData.id;
-
-    // 2. 키 위치 연결 (레이어 이름 = 키값인 것만)
-    var keyPositions = msg.keyPositions || [];
-    var linkedCount = 0;
-
-    for (var i = 0; i < keyPositions.length; i++) {
-      var kp = keyPositions[i];
-      // 키가 Tolgee에 존재하는지 확인
-      var cached = (_cache || []).find(function(item) { return item.key === kp.key; });
-      if (!cached) continue;
-
-      // 스크린샷에 키 위치 연결
-      var linkRes = await api._fetch(
-        api.baseUrl + '/v2/projects/' + api.projectId + '/screenshots/' + screenshotId + '/keys',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            keys: [{
-              keyId: cached.keyId,
-              positions: [{
-                x: kp.x, y: kp.y,
-                width: kp.width, height: kp.height,
-              }],
-            }],
-          }),
-        }
+  if (!cached||!cached.keyId){console.warn('스크린샷: 키ID 없음',keyName);return;}
+  var keyId=cached.keyId;
+  var frame=selectedFrames[0];
+  toFigma({type:'export-screenshot',frameId:frame.id});
+  window._screenshotCallback=async function(msg){
+    window._screenshotCallback=null;
+    try{
+      var binary=atob(msg.base64);
+      var bytes=new Uint8Array(binary.length);
+      for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      var blob=new Blob([bytes],{type:'image/png'});
+      var formData=new FormData();
+      formData.append('screenshot',blob,(frame.name||'screenshot')+'.png');
+      var res=await fetch(
+        api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
+        {method:'POST',credentials:'omit',headers:{'X-API-Key':api.apiKey},body:formData}
       );
-      if (linkRes.ok) linkedCount++;
-    }
-
-    // 결과 표시
-    var div = document.createElement('div');
-    div.className = 'frame-item';
-    div.style.marginBottom = '6px';
-    div.innerHTML = '<span style="color:var(--green);font-size:12px">✓</span>'
-      + '<span class="frame-name">' + frameName + '</span>'
-      + '<span style="font-family:var(--mono);font-size:10px;color:var(--text-3)">' + linkedCount + '개 키 연결</span>';
-    resultEl.appendChild(div);
-
-  } catch(e) {
-    var div = document.createElement('div');
-    div.className = 'frame-item';
-    div.style.marginBottom = '6px';
-    div.innerHTML = '<span style="color:var(--amber);font-size:12px">✗</span>'
-      + '<span class="frame-name">' + frameName + '</span>'
-      + '<span style="font-family:var(--mono);font-size:10px;color:var(--amber)">' + e.message + '</span>';
-    resultEl.appendChild(div);
-  }
+      if(!res.ok){showToast('스크린샷 업로드 실패: '+res.status);}
+      else{showToast('✓ 스크린샷 첨부 완료');}
+    }catch(e){console.warn('스크린샷 오류:',e.message);}
+  };
 }
 
 function renderReplaceLangSelect() {
