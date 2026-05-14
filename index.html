@@ -1491,28 +1491,54 @@ async function uploadScreenshotForKey(api, keyName) {
   if (!cached||!cached.keyId) {
     try{_cache=await api.fetchAllKeys();_cacheTime=Date.now();cached=_cache.find(function(item){return item.key===keyName;});}catch(e){}
   }
-  if (!cached||!cached.keyId){console.warn('스크린샷: 키ID 없음',keyName);return;}
-  var keyId=cached.keyId;
-  var frame=selectedFrames[0];
-  toFigma({type:'export-screenshot',frameId:frame.id});
-  window._screenshotCallback=async function(msg){
-    window._screenshotCallback=null;
-    try{
-      var binary=atob(msg.base64);
-      var bytes=new Uint8Array(binary.length);
-      for(var i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-      var blob=new Blob([bytes],{type:'image/png'});
-      var formData=new FormData();
-      formData.append('screenshot',blob,(frame.name||'screenshot')+'.png');
-      var res=await fetch(
+  if (!cached||!cached.keyId) { console.warn('스크린샷: keyId 없음', keyName); return; }
+  var keyId = cached.keyId;
+  var frame = selectedFrames[0];
+  toFigma({type:'export-screenshot', frameId:frame.id});
+  window._screenshotCallback = async function(msg) {
+    window._screenshotCallback = null;
+    try {
+      var binary = atob(msg.base64);
+      var bytes = new Uint8Array(binary.length);
+      for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      var blob = new Blob([bytes], {type:'image/png'});
+
+      // Step 1: POST /v2/image-upload
+      var formData1 = new FormData();
+      formData1.append('image', blob, (frame.name||'screenshot')+'.png');
+      var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
+        method:'POST', credentials:'omit',
+        headers:{'X-API-Key':api.apiKey},
+        body:formData1,
+      });
+      if (!uploadRes.ok) {
+        var e1 = await uploadRes.json().catch(function(){return {};});
+        throw new Error('이미지 업로드 실패: '+uploadRes.status+' '+JSON.stringify(e1));
+      }
+      var uploadData = await uploadRes.json();
+      var imageUploadId = uploadData.id;
+
+      // Step 2: POST /v2/projects/{id}/keys/{keyId}/screenshots
+      var linkRes = await fetch(
         api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
-        {method:'POST',credentials:'omit',headers:{'X-API-Key':api.apiKey},body:formData}
+        {
+          method:'POST', credentials:'omit',
+          headers:{'X-API-Key':api.apiKey,'Content-Type':'application/json'},
+          body:JSON.stringify({uploadedImageId:imageUploadId}),
+        }
       );
-      if(!res.ok){showToast('스크린샷 업로드 실패: '+res.status);}
-      else{showToast('✓ 스크린샷 첨부 완료');}
-    }catch(e){console.warn('스크린샷 오류:',e.message);}
+      if (!linkRes.ok) {
+        var e2 = await linkRes.json().catch(function(){return {};});
+        throw new Error('키 연결 실패: '+linkRes.status+' '+JSON.stringify(e2));
+      }
+      showToast('✓ 스크린샷 첨부 완료');
+    } catch(e) {
+      console.warn('스크린샷 오류:', e.message);
+      showToast('스크린샷 실패: '+e.message);
+    }
   };
 }
+
 
 function renderReplaceLangSelect() {
   const sel = document.getElementById('replace-lang-sel');
