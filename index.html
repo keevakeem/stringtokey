@@ -1566,6 +1566,16 @@ document.getElementById('feat-ver').addEventListener('input',renderPreview);
 // ── 언어 교체 탭 ─────────────────────────────────────────────────────────────
 
 // ── 키 등록 시 스크린샷 업로드 ──────────────────────────────────────────────────
+function handleScreenshotReady(msg) {
+  console.log('[SKT] screenshot-ready received, base64 len:', msg.base64 ? msg.base64.length : 0);
+  if (window._screenshotCallback) {
+    window._screenshotCallback(msg);
+    window._screenshotCallback = null;
+  } else {
+    console.warn('[SKT] _screenshotCallback is null — missed callback');
+  }
+}
+
 async function uploadScreenshotForKey(api, keyName) {
   if (!selectedFrames.length) return;
   var cached = (_cache||[]).find(function(item){return item.key===keyName;});
