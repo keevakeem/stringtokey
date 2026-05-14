@@ -500,6 +500,7 @@ let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',langs:[]}
 let selectedFrames = [];
 let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
 let currentTextNodeId = null; // 현재 선택된 텍스트 레이어 ID (레이어 이름 변경용)
+let currentTopFrameName = null; // 선택된 텍스트의 최상위 프레임 이름 (Figma 화면 태그용)
 let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
 let bulkMode = false;   // 일괄 모드 여부
 let cardTags = {};
@@ -624,12 +625,18 @@ function applySelection(msg) {
     // 맥락 저장 (Claude 추천에 활용)
     layerContext = texts[0].context || null;
     currentTextNodeId = texts[0].id || null;
+    currentTopFrameName = texts[0].topFrameName || null;
     // hint-box에 nodeId 저장 — 검색 후에도 유지
     document.getElementById('hint-box').dataset.nodeId = texts[0].id || '';
+    // 프레임 이름이 x.x.x 형식이면 hint에 표시
+    if (currentTopFrameName) {
+      document.getElementById('hint-frame').textContent = '📱 ' + currentTopFrameName;
+    }
   } else {
     hint.style.display = 'none';
     layerContext = null;
     currentTextNodeId = null;
+    currentTopFrameName = null;
   }
 
   // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
@@ -1387,6 +1394,12 @@ function onNKI(v){selKey=v;document.getElementById('c-key').textContent=v;}
 function showConfirm(key,val){
   document.getElementById('c-key').textContent=key;
   document.getElementById('c-val').textContent=val;
+  // 최상위 프레임 이름이 x.x.x 형식이면 자동으로 Figma 태그 추가
+  if (IS_FIGMA && currentTopFrameName && /^\d+\.\d+\.\d+$/.test(currentTopFrameName)) {
+    if (selTags.indexOf(currentTopFrameName) === -1) {
+      selTags.push(currentTopFrameName);
+    }
+  }
   uCT();
   document.getElementById('confirm-box').classList.add('visible');
 }
