@@ -760,8 +760,15 @@ async function registerBulkItem(idx) {
         bTargetLangs.forEach(function(l) { bTranslations[l] = ''; });
       }
 
-      await api.registerKey({ keyName: keyName, val: textItem.characters, translations: bTranslations, figmaTags: [], existingKeyId: null });
-      _cache = null;
+      // figmaTags — topFrameName이 있으면 Description에 추가
+      var bFigmaTags = [];
+      if (textItem.topFrameName && /^\d+\.\d+\.\d+$/.test(textItem.topFrameName)) {
+        bFigmaTags = [textItem.topFrameName];
+      }
+
+      var registerResult = await api.registerKey({ keyName: keyName, val: textItem.characters, translations: bTranslations, figmaTags: bFigmaTags, existingKeyId: null });
+      // 캐시 갱신 — 스크린샷 업로드 전에 keyId가 필요하므로 즉시 fetch
+      try { _cache = await api.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) { _cache = null; }
 
       // 레이어 이름 변경 (IS_FIGMA + 체크박스)
       var renameChk = document.getElementById('rename-layer-chk');
@@ -772,7 +779,6 @@ async function registerBulkItem(idx) {
       // 스크린샷 첨부 (IS_FIGMA + 체크박스 + 해당 텍스트의 최상위 프레임)
       var screenshotChk = document.getElementById('screenshot-chk');
       if (IS_FIGMA && screenshotChk && screenshotChk.checked && textItem.topFrameId) {
-        // 임시로 해당 텍스트의 최상위 프레임을 selectedFrames에 세팅
         var prevFrames = selectedFrames;
         selectedFrames = [{ id: textItem.topFrameId, name: textItem.topFrameName || keyName }];
         await uploadScreenshotForKey(api, keyName);
@@ -1498,7 +1504,8 @@ async function regKey(){
       }
 
       await a.registerKey({keyName:keyToRegister,val:valToRegister,translations:translations,figmaTags:tagsToRegister,existingKeyId:existingId});
-      _cache=null;
+      // 캐시 갱신 — 스크린샷 업로드 전에 keyId 필요
+      try { _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) { _cache = null; }
       showToast('✓ "' + keyToRegister + '" Tolgee에 등록됐어요');
       // 선택된 텍스트 레이어 이름을 키값으로 변경 (체크박스 확인)
       const renameChk = document.getElementById('rename-layer-chk');
