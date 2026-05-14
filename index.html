@@ -7,51 +7,92 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Pretendard:wght@400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* ── 다크 모드 (기본) ── */
 :root{
-  --bg:#F7F6F2;--surface:#FFF;--border:#E2E0D8;--border-strong:#C8C5BB;
-  --text:#1A1917;--text-2:#6B6860;--text-3:#A8A59E;
-  --green:#166534;--green-bg:#DCFCE7;--green-bd:#86EFAC;
-  --amber:#92400E;--amber-bg:#FEF3C7;
-  --blue:#1E40AF;--blue-bg:#DBEAFE;
-  --purple:#5B21B6;--purple-bg:#EDE9FE;--purple-bd:#C4B5FD;
+  --bg:#000000;
+  --surface:#1A1919;
+  --surface-2:#2A2828;
+  --border:rgba(244,243,243,0.10);
+  --border-strong:rgba(244,243,243,0.20);
+  --text:#F4F3F3;
+  --text-2:#D7D5D5;
+  --text-3:#A6A1A1;
+  --text-4:#757171;
+  --primary:#FFCA00;
+  --on-primary:#3F0000;
+  --primary-t20:rgba(255,202,0,0.20);
+  --btn-bg:#2A2828;
+  --on-btn:#F4F3F3;
+  --btn-s-bg:#1A1919;
+  --btn-secondary:#FFE6B4;
+  --btn-tertiary:#565252;
+  --green:#4CDC42;--green-bg:rgba(76,220,66,0.16);
+  --amber:#FF7444;--amber-bg:rgba(255,116,68,0.16);
+  --blue:#95DEFF;--blue-bg:rgba(149,222,255,0.16);
+  --error:#FF4E32;
   --mono:'IBM Plex Mono',monospace;--sans:'Pretendard',-apple-system,sans-serif;
 }
-body{font-family:var(--sans);background:#eee;color:var(--text);font-size:13px;margin:0;padding:0}
-.plugin-wrap{width:440px;height:100vh;margin:0 auto;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+/* ── 라이트 모드 ── */
+:root[data-theme="light"]{
+  --bg:#F4F3F3;
+  --surface:#FAFAFA;
+  --surface-2:#FFFFFF;
+  --border:rgba(26,25,25,0.10);
+  --border-strong:rgba(26,25,25,0.20);
+  --text:#1A1919;
+  --text-2:#3E3C3C;
+  --text-3:#8A8585;
+  --text-4:#BEBBBB;
+  --primary:#FFCA00;
+  --on-primary:#3F0000;
+  --primary-t20:rgba(255,202,0,0.20);
+  --btn-bg:#1A1919;
+  --on-btn:#F4F3F3;
+  --btn-s-bg:#E4E2E2;
+  --btn-secondary:#FFE7AA;
+  --btn-tertiary:#E4E2E2;
+  --green:#1FA644;--green-bg:rgba(31,166,68,0.16);
+  --amber:#FF7600;--amber-bg:rgba(255,118,0,0.16);
+  --blue:#008AFF;--blue-bg:rgba(0,138,255,0.16);
+  --error:#FF4E32;
+  --mono:'IBM Plex Mono',monospace;--sans:'Pretendard',-apple-system,sans-serif;
+}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13px;margin:0;padding:0;transition:background .2s,color .2s}
+.plugin-wrap{width:440px;height:100vh;margin:0 auto;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);box-shadow:0 0 0 1px var(--border)}
 
 /* ── 탭 ── */
-.tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
-.tab{flex:1;padding:10px 0;font-size:12px;font-weight:500;text-align:center;cursor:pointer;color:var(--text-3);border:none;border-bottom:2px solid transparent;background:none;font-family:var(--sans);transition:all .15s}
+.tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;position:relative}
+.tab{flex:1;padding:9px 4px;font-size:11px;font-weight:500;text-align:center;cursor:pointer;color:var(--text-3);border:none;border-bottom:2px solid transparent;background:none;font-family:var(--sans);transition:all .15s;white-space:nowrap}
 .tab.active{color:var(--text);border-bottom-color:var(--text)}
-.tab-panel{display:none;flex:1;overflow-y:auto;padding:14px}
+.tab-panel{display:none;flex:1;overflow-y:auto;padding:12px}
 .plugin-wrap .tabs{flex-shrink:0}
 .plugin-wrap .tab-panel{flex:1}
 .tab-panel.active{display:block}
 
 /* ── 공통 ── */
-.lbl{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
-input[type=text],input[type=password],select{font-family:var(--sans);font-size:13px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px;outline:none;width:100%;transition:border-color .15s}
+.lbl{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-4);margin-bottom:5px}
+input[type=text],input[type=password],select{font-family:var(--sans);font-size:13px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px;outline:none;width:100%;transition:border-color .15s;-webkit-appearance:none}
 input[type=text]:focus,input[type=password]:focus,select:focus{border-color:var(--border-strong)}
 input[type=text]:disabled,input[type=password]:disabled{background:var(--surface);color:var(--text-3);border-color:var(--border);cursor:default;opacity:1}
 select{cursor:pointer}
 .row{display:flex;gap:7px;margin-bottom:9px;align-items:center}
 .row>input,.row>select{flex:1}
-.row>.btn-s,.row>.btn-p{flex:none;white-space:nowrap;width:auto;padding:8px 14px}
-.btn-p{width:100%;padding:9px;font-family:var(--sans);font-size:13px;font-weight:500;color:#fff;background:var(--text);border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:opacity .15s}
-.btn-p:hover{opacity:.85}.btn-p:disabled{opacity:.4;cursor:not-allowed}
-.btn-s{width:100%;padding:9px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text);background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:border-color .15s}
-.btn-s:hover{border-color:var(--border-strong)}
+.row>.btn-s,.row>.btn-p{flex:none;white-space:nowrap;width:auto}
+.btn-p{width:100%;padding:0 14px;height:34px;font-family:var(--sans);font-size:12px;font-weight:500;color:var(--on-btn);background:var(--btn-bg);border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:opacity .15s;flex-shrink:0}
+.btn-p:hover{opacity:.8}.btn-p:disabled{opacity:.35;cursor:not-allowed}
+.btn-s{width:100%;padding:0 14px;height:34px;font-family:var(--sans);font-size:12px;font-weight:500;color:var(--text-2);background:var(--btn-s-bg);border:none;border-radius:7px;cursor:pointer;transition:opacity .15s;flex-shrink:0}
+.btn-s:hover{opacity:.85}
 .divider{border:none;border-top:1px solid var(--border);margin:10px 0}
-.empty{text-align:center;padding:20px 0;color:var(--text-3);font-size:12px;line-height:1.9}
-.info-box{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--text-2);line-height:1.7}
+.empty{text-align:center;padding:20px 0;color:var(--text-4);font-size:12px;line-height:1.9}
+.info-box{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--text-3);line-height:1.7}
 .info-box strong{color:var(--text);font-weight:500}
-.saved-badge{font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:20px;background:var(--green-bg);color:var(--green);display:none}
+.saved-badge{font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:20px;background:var(--primary-t20);color:var(--primary);display:none}
 .saved-badge.show{display:inline-block}
 
 /* ── 카드 ── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:7px;cursor:pointer;transition:border-color .15s}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:7px;cursor:pointer;transition:border-color .15s,background .15s}
 .card:hover{border-color:var(--border-strong)}
-.card.selected{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.card.selected{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
 .card.new-card{border-style:dashed}.card.new-card.selected{border-style:solid}
 .key-mono{font-family:var(--mono);font-size:12px;font-weight:500;word-break:break-all}
 .val-t{font-size:12px;color:var(--text-2);margin:3px 0 6px}
@@ -59,15 +100,15 @@ select{cursor:pointer}
 .sim-bg{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
 .sim-fill{height:100%;border-radius:2px}.fill-g{background:#22c55e}.fill-a{background:#f59e0b}
 .badge{font-size:10px;font-weight:500;padding:2px 7px;border-radius:20px;white-space:nowrap;flex-shrink:0}
-.br{background:var(--green-bg);color:var(--green)}.bs{background:var(--amber-bg);color:var(--amber)}.bn{background:var(--blue-bg);color:var(--blue)}
+.br{background:var(--green-bg);color:var(--green)}.bs{background:var(--amber-bg);color:var(--amber)}.bn{background:var(--primary-t20);color:var(--primary)}
 
 /* ── Figma 태그 ── */
 .fig-row{margin-top:7px;padding-top:7px;border-top:1px solid var(--border)}
 .fig-lbl{font-size:10px;color:var(--text-3);margin-bottom:5px}
 .ftags{display:flex;flex-wrap:wrap;gap:4px}
-.ftag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-bd);border-radius:5px;padding:2px 7px}
-.ftag-add{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-family:var(--mono);background:transparent;color:var(--text-3);border:1px dashed var(--border);border-radius:5px;padding:2px 7px;cursor:pointer;transition:all .15s}
-.ftag-add:hover{border-color:var(--purple-bd);color:var(--purple);background:var(--purple-bg)}
+.ftag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);background:var(--primary-t20);color:var(--primary);border:1px solid rgba(255,202,0,0.3);border-radius:5px;padding:2px 7px}
+.ftag-add{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-family:var(--mono);background:transparent;color:var(--text-3);border:1px dashed var(--border-strong);border-radius:5px;padding:2px 7px;cursor:pointer;transition:all .15s}
+.ftag-add:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-t20)}
 .ti-row{display:flex;gap:4px;margin-top:4px;align-items:center}
 .ti-row input{font-family:var(--mono);font-size:11px;padding:3px 7px;border-radius:5px;width:80px;flex:none}
 .ti-row button{font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-family:var(--sans)}
@@ -76,7 +117,7 @@ select{cursor:pointer}
 .new-ki:focus{border-bottom-color:var(--text)}
 
 /* ── Confirm ── */
-.confirm-box{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:13px;margin-top:10px;display:none}
+.confirm-box{background:var(--surface);border:1.5px solid var(--border-strong);border-radius:9px;padding:13px;margin-top:10px;display:none;position:sticky;bottom:0}
 .confirm-box.visible{display:block}
 .ac-row{display:flex;gap:6px;margin-top:10px}
 .ac-row .btn-p,.ac-row .btn-s{flex:1;padding:8px}
@@ -85,12 +126,12 @@ select{cursor:pointer}
 .frame-item{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:5px}
 .frame-num{font-family:var(--mono);font-size:10px;color:var(--text-3);min-width:16px}
 .frame-name{flex:1;font-size:11px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.frame-new{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--purple)}
-.prev-badge{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple-bd);border-radius:5px;padding:2px 7px}
-.no-sel{text-align:center;padding:24px 14px;color:var(--text-3);font-size:12px;line-height:1.9;background:var(--surface);border:1px dashed var(--border);border-radius:9px}
+.frame-new{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--primary)}
+.prev-badge{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:500;background:var(--primary-t20);color:var(--primary);border:1px solid rgba(255,202,0,0.3);border-radius:5px;padding:2px 7px}
+.no-sel{text-align:center;padding:24px 14px;color:var(--text-4);font-size:12px;line-height:1.9;background:var(--surface);border:1px dashed var(--border-strong);border-radius:9px}
 
 /* ── Settings ── */
-.screen-item{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 10px;margin-bottom:5px}
+.screen-item{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 10px;margin-bottom:5px;transition:background .15s}
 .screen-val{flex:1;font-family:var(--mono);font-size:12px;color:var(--text)}
 .rm-btn{font-size:11px;color:var(--text-3);cursor:pointer;background:none;border:none;padding:0 2px}
 .rm-btn:hover{color:var(--text)}
@@ -102,22 +143,22 @@ select{cursor:pointer}
 .thresh-row{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2);margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 10px}
 .thresh-row input[type=range]{flex:1;accent-color:var(--text);cursor:pointer}
 .tv{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text);min-width:26px}
-.hint-box{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:9px 11px;margin-bottom:10px;display:none}
+.hint-box{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:7px 11px;margin-bottom:8px;display:none}
 .hint-box strong{color:var(--text);font-weight:500;font-size:12px;display:block}
 .hint-box span{font-size:10px;font-family:var(--mono);color:var(--text-3);margin-top:2px;display:block}
-.toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--text);color:#fff;font-size:12px;padding:8px 14px;border-radius:7px;transition:transform .25s;z-index:99;white-space:nowrap;pointer-events:none}
+.toast{position:fixed;bottom:12px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface-2);color:var(--text);font-size:12px;padding:8px 14px;border-radius:7px;border:1px solid var(--border-strong);transition:transform .25s;z-index:99;white-space:nowrap;pointer-events:none}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .ld{display:inline-flex;gap:3px;align-items:center}
-.ld span{width:3px;height:3px;background:#fff;border-radius:50%;animation:d .8s infinite}
+.ld span{width:3px;height:3px;background:var(--text-3);border-radius:50%;animation:d .8s infinite}
 .ld span:nth-child(2){animation-delay:.15s}.ld span:nth-child(3){animation-delay:.3s}
 @keyframes d{0%,80%,100%{opacity:.2}40%{opacity:1}}
-.bulk-item{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:7px}
+.bulk-item{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:11px 13px;margin-bottom:7px;transition:opacity .2s}
 .bulk-item.done{opacity:.5;border-color:var(--green-bd)}
 .bulk-item .val{font-size:13px;color:var(--text);margin-bottom:5px;font-weight:500}
 .bulk-item .key-row{display:flex;align-items:center;gap:6px}
 .bulk-item .key-edit{font-family:var(--mono);font-size:11px;flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none}
 .bulk-item .key-edit:focus{border-color:var(--border-strong)}
-.bulk-item .reg-btn{font-size:11px;padding:5px 10px;border-radius:6px;border:none;background:var(--text);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.bulk-item .reg-btn{font-size:11px;padding:0 10px;height:28px;border-radius:6px;border:none;background:var(--btn-bg);color:var(--on-btn);cursor:pointer;white-space:nowrap;flex-shrink:0}
 .bulk-item .reg-btn:disabled{opacity:.4;cursor:not-allowed}
 .bulk-item .done-mark{font-size:11px;color:var(--green);font-family:var(--mono)}
 .mode-active{background:var(--text)!important;color:#fff!important;border-color:var(--text)!important}
@@ -134,10 +175,10 @@ select{cursor:pointer}
 
 <div class="plugin-wrap">
 <div class="tabs">
-  <button class="tab active" onclick="sw('keys')">문자열 키</button>
-  <button class="tab figma-only" onclick="sw('replace')" style="display:none">언어 교체</button>
-  <button class="tab figma-only" onclick="sw('rename')" style="display:none">프레임 이름</button>
-  <button class="tab" onclick="sw('manage')">관리</button>
+  <button class="tab active" onclick="sw('keys')">키 설정</button>
+  <button class="tab figma-only" onclick="sw('replace')" style="display:none">언어 변경</button>
+  <button class="tab figma-only" onclick="sw('rename')" style="display:none">프레임</button>
+  <button class="tab" onclick="sw('manage')">화면 관리</button>
   <button class="tab" onclick="sw('settings')">설정</button>
 </div>
 
@@ -148,9 +189,9 @@ select{cursor:pointer}
   <div style="margin-bottom:10px"><select id="screen-sel"></select></div>
 
   <!-- 모드 전환 -->
-  <div style="display:flex;gap:6px;margin-bottom:12px">
-    <button id="mode-single" class="btn-p" style="flex:1;padding:7px;font-size:12px" onclick="setMode('single')">문자열 검색</button>
-    <button id="mode-bulk"   class="btn-s" style="flex:1;padding:7px;font-size:12px" onclick="setMode('bulk')">화면 내 문구 등록 <span id="bulk-badge" style="display:none;background:#fff;color:var(--text);border-radius:20px;padding:1px 6px;font-size:10px;margin-left:4px">0</span></button>
+  <div style="display:flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px;margin-bottom:12px;gap:3px">
+    <button id="mode-single" onclick="setMode('single')" style="flex:1;padding:5px 8px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:var(--btn-bg);color:var(--on-btn);font-family:var(--sans);transition:all .15s">문자열 검색</button>
+    <button id="mode-bulk" onclick="setMode('bulk')" style="flex:1;padding:5px 8px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:transparent;color:var(--text-3);font-family:var(--sans);transition:all .15s">화면 내 문구 등록 <span id="bulk-badge" style="display:none;background:var(--border);color:var(--text);border-radius:20px;padding:1px 6px;font-size:10px;margin-left:2px">0</span></button>
   </div>
 
   <!-- 단일 검색 영역 -->
@@ -165,7 +206,7 @@ select{cursor:pointer}
   <!-- 재사용/유사도 슬라이더는 설정 탭으로 이동 (숨김 처리) -->
   <input type="hidden" id="tr-r" value="85">
   <input type="hidden" id="tr-s" value="50">
-  <button class="btn-p" id="search-btn" onclick="doSearch()">
+  <button class="btn-p" id="search-btn" onclick="doSearch()" style="margin-top:4px">
     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     유사 문자열 검색
   </button>
@@ -197,8 +238,8 @@ select{cursor:pointer}
       키를 확인하고 일괄 등록하세요.
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button class="btn-p" style="flex:1;padding:8px;font-size:12px" onclick="registerAll()">전체 등록</button>
-      <button class="btn-s" style="flex:1;padding:8px;font-size:12px" onclick="refreshBulk()">키 재추천</button>
+      <button class="btn-p" style="flex:1" onclick="registerAll()">전체 등록</button>
+      <button class="btn-s" style="flex:1" onclick="refreshBulk()">키 재추천</button>
     </div>
     <div id="bulk-list"></div>
   </div>
@@ -232,6 +273,22 @@ select{cursor:pointer}
 
 <!-- ══ 프레임 이름 ══ -->
 <div class="tab-panel" id="tab-rename">
+  <!-- 기능 이름 매핑 (상단) -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="lbl" style="margin:0">기능 이름 매핑</div>
+    <span class="saved-badge" id="feat-saved">저장됨</span>
+  </div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">기능번호 → 이름. 프레임 이름 변경 시 툴팁에 표시돼요.</div>
+  <div id="feat-map-list"></div>
+  <div class="row" style="margin-top:6px;margin-bottom:4px">
+    <input type="text" id="fm-num" placeholder="번호 (예: 3)" style="max-width:70px;flex:none">
+    <input type="text" id="fm-name" placeholder="이름 (예: 온보딩)">
+    <button class="btn-s" style="flex:none;white-space:nowrap" onclick="addFeat()">추가</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 프레임 이름 변경 -->
   <div class="info-box">Figma에서 <strong>프레임을 선택</strong>하면 표시돼요.<br>기능번호·버전 입력 → <strong>좌→우 순서</strong>로 자동 번호.</div>
   <div id="no-sel" class="no-sel">Figma 캔버스에서<br>프레임을 선택해주세요</div>
   <div id="rename-content" style="display:none">
@@ -260,24 +317,25 @@ select{cursor:pointer}
   <div id="screen-list"></div>
   <div class="row" style="margin-top:6px">
     <input type="text" id="new-screen" placeholder="screen 이름 (예: onboarding)">
-    <button class="btn-s" style="flex:none;padding:8px 12px;font-size:12px;white-space:nowrap" onclick="addScreen()">추가</button>
-  </div>
-  <div class="divider"></div>
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div class="lbl" style="margin:0">기능 이름 매핑</div>
-    <span class="saved-badge" id="feat-saved">저장됨</span>
-  </div>
-  <div class="info-box" style="margin-bottom:8px;font-size:11px">기능번호 → 이름. Figma 태그 툴팁에 표시돼요.</div>
-  <div id="feat-map-list"></div>
-  <div class="row" style="margin-top:6px">
-    <input type="text" id="fm-num" placeholder="번호 (예: 3)" style="max-width:70px;flex:none">
-    <input type="text" id="fm-name" placeholder="이름 (예: 온보딩)">
-    <button class="btn-s" style="flex:none;padding:8px 12px;font-size:12px;white-space:nowrap" onclick="addFeat()">추가</button>
+    <button class="btn-s" style="flex:none;white-space:nowrap" onclick="addScreen()">추가</button>
   </div>
 </div>
 
 <!-- ══ 설정 ══ -->
 <div class="tab-panel" id="tab-settings">
+
+  <!-- 테마 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div>
+      <div class="lbl" style="margin-bottom:2px">화면 모드</div>
+      <div style="font-size:12px;color:var(--text-3)">다크 모드가 기본값이에요</div>
+    </div>
+    <div style="display:flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px">
+      <button id="theme-dark" onclick="setTheme('dark')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:var(--btn-bg);color:var(--on-btn);font-family:var(--sans)">다크</button>
+      <button id="theme-light" onclick="setTheme('light')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:transparent;color:var(--text-3);font-family:var(--sans)">라이트</button>
+    </div>
+  </div>
+  <div class="divider"></div>
 
   <!-- Claude API Key -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -291,7 +349,7 @@ select{cursor:pointer}
     <input type="password" id="claude-key" placeholder="sk-ant-..." style="font-family:var(--mono);font-size:11px">
   </div>
   <div style="margin-bottom:14px">
-    <button class="btn-p" style="width:auto;padding:8px 16px;font-size:12px" onclick="saveClaudeKey()">저장</button>
+    <button class="btn-p" onclick="saveClaudeKey()">저장</button>
   </div>
   <div class="divider"></div>
 
@@ -310,8 +368,8 @@ select{cursor:pointer}
   <input type="hidden" id="cfg-url">
   <input type="hidden" id="cfg-project">
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveTolgee()">저장</button>
-    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="testTolgee()">연결 테스트</button>
+    <button class="btn-p" style="flex:1" onclick="saveTolgee()">저장</button>
+    <button class="btn-s" style="flex:1" onclick="testTolgee()">연결 테스트</button>
   </div>
   <div class="divider"></div>
 
@@ -331,8 +389,8 @@ select{cursor:pointer}
     <input type="password" id="gh-token" placeholder="ghp_..." style="font-family:var(--mono);font-size:11px">
   </div>
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveGithubSettings()">저장</button>
-    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="syncFromGithub()">지금 동기화</button>
+    <button class="btn-p" style="flex:1" onclick="saveGithubSettings()">저장</button>
+    <button class="btn-s" style="flex:1" onclick="syncFromGithub()">지금 동기화</button>
   </div>
   <div class="divider"></div>
 
@@ -678,8 +736,12 @@ function setMode(mode) {
   bulkMode = mode === 'bulk';
   document.getElementById('single-area').style.display = bulkMode ? 'none' : 'block';
   document.getElementById('bulk-area').style.display   = bulkMode ? 'block' : 'none';
-  document.getElementById('mode-single').className = bulkMode ? 'btn-s' : 'btn-p';
-  document.getElementById('mode-bulk').className   = bulkMode ? 'btn-p' : 'btn-s';
+  var btnSingle = document.getElementById('mode-single');
+  var btnBulk = document.getElementById('mode-bulk');
+  btnSingle.style.background = bulkMode ? 'transparent' : 'var(--btn-bg)';
+  btnSingle.style.color = bulkMode ? 'var(--text-3)' : 'var(--on-btn)';
+  btnBulk.style.background = bulkMode ? 'var(--btn-bg)' : 'transparent';
+  btnBulk.style.color = bulkMode ? 'var(--on-btn)' : 'var(--text-3)';
   if (bulkMode) renderBulkList();
 }
 
@@ -717,7 +779,10 @@ async function renderBulkList() {
     div.className = 'bulk-item';
     div.id = 'bulk-item-' + item.idx;
     div.innerHTML = [
-      '<div class="val">' + item.text + '</div>',
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
+        '<div class="val" style="margin:0">' + item.text + '</div>',
+        '<button onclick="excludeBulkItem(' + item.idx + ')" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="제외">×</button>',
+      '</div>',
       '<div class="key-row">',
         '<input class="key-edit" id="bulk-key-' + item.idx + '" value="' + item.key + '">',
         '<button class="reg-btn" onclick="registerBulkItem(' + item.idx + ')">등록</button>',
@@ -729,6 +794,17 @@ async function renderBulkList() {
 }
 
 // ── 개별 등록 ─────────────────────────────────────────────────────────────────
+function excludeBulkItem(idx) {
+  var itemEl = document.getElementById('bulk-item-' + idx);
+  if (itemEl) {
+    itemEl.style.transition = 'opacity .2s';
+    itemEl.style.opacity = '0';
+    setTimeout(function() { itemEl.remove(); }, 200);
+  }
+  // bulkTexts에서도 제거 (전체 등록 시 제외)
+  bulkTexts[idx] = null;
+}
+
 async function registerBulkItem(idx) {
   var keyEl = document.getElementById('bulk-key-' + idx);
   var itemEl = document.getElementById('bulk-item-' + idx);
@@ -800,6 +876,7 @@ async function registerAll() {
   var items = document.querySelectorAll('.bulk-item:not(.done)');
   if (!items.length) { showToast('등록할 항목이 없어요'); return; }
   for (var i = 0; i < bulkTexts.length; i++) {
+    if (!bulkTexts[i]) continue; // 제외된 항목 스킵
     var itemEl = document.getElementById('bulk-item-' + i);
     if (itemEl && !itemEl.classList.contains('done')) {
       await registerBulkItem(i);
@@ -1619,22 +1696,48 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
         var blob = new Blob([bytes], {type:'image/png'});
 
-        // POST /v2/projects/{id}/keys/{keyId}/screenshots (multipart, field: screenshot)
-        // Tolgee v2: 한 번에 업로드+연결
+        // Step 1: POST /v2/image-upload (multipart, field: image)
         var formData1 = new FormData();
-        formData1.append('screenshot', blob, (frameName||'screenshot')+'.png');
+        formData1.append('image', blob, (frameName||'screenshot')+'.png');
+        var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
+          method:'POST', credentials:'omit',
+          headers:{'X-API-Key':api.apiKey},
+          body:formData1,
+        });
+        console.log('[SKT] image-upload status:', uploadRes.status);
+        if (!uploadRes.ok) {
+          var eu = await uploadRes.json().catch(function(){return {};});
+          throw new Error('이미지 업로드 실패: '+uploadRes.status+' '+JSON.stringify(eu));
+        }
+        var uploadData = await uploadRes.json();
+        console.log('[SKT] image-upload response:', JSON.stringify(uploadData));
+        var imageUploadId = uploadData.id;
+
+        // Step 2: POST /v2/projects/{id}/keys/{keyId}/screenshots (JSON)
+        // keypointPositions로 텍스트 위치 하이라이트 전달
+        var keyPositions = msg.keyPositions || [];
+        var thisKeyPos = keyPositions.find(function(p) { return p.key === keyName; });
+        var linkBody = { uploadedImageId: imageUploadId };
+        if (thisKeyPos) {
+          linkBody.keypointPositions = [{
+            x: thisKeyPos.x,
+            y: thisKeyPos.y,
+            width: thisKeyPos.width,
+            height: thisKeyPos.height,
+          }];
+        }
         var linkRes = await fetch(
           api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
           {
             method:'POST', credentials:'omit',
-            headers:{'X-API-Key':api.apiKey},
-            body:formData1,
+            headers:{'X-API-Key':api.apiKey,'Content-Type':'application/json'},
+            body:JSON.stringify(linkBody),
           }
         );
-        console.log('[SKT] screenshot upload status:', linkRes.status);
+        console.log('[SKT] key-screenshot link status:', linkRes.status);
         if (!linkRes.ok) {
           var e2 = await linkRes.json().catch(function(){return {};});
-          throw new Error('스크린샷 업로드 실패: '+linkRes.status+' '+JSON.stringify(e2));
+          throw new Error('키 연결 실패: '+linkRes.status+' '+JSON.stringify(e2));
         }
         showToast('✓ 스크린샷 첨부 완료');
       } catch(e) {
@@ -1750,7 +1853,27 @@ function doReplace() {
   toFigma({ type: 'replace-texts', replacements: replaceMap });
 }
 
+// ── 테마 전환 ──────────────────────────────────────────────────────────────────
+function setTheme(mode) {
+  document.documentElement.setAttribute('data-theme', mode);
+  try { localStorage.setItem('skt_theme', mode); } catch(e) {}
+  var darkBtn = document.getElementById('theme-dark');
+  var lightBtn = document.getElementById('theme-light');
+  if (darkBtn && lightBtn) {
+    darkBtn.style.background = mode === 'dark' ? 'var(--btn-bg)' : 'transparent';
+    darkBtn.style.color = mode === 'dark' ? 'var(--on-btn)' : 'var(--text-3)';
+    lightBtn.style.background = mode === 'light' ? 'var(--btn-bg)' : 'transparent';
+    lightBtn.style.color = mode === 'light' ? 'var(--on-btn)' : 'var(--text-3)';
+  }
+}
+
 async function initApp() {
+  // 저장된 테마 복원
+  try {
+    var savedTheme = localStorage.getItem('skt_theme') || 'dark';
+    setTheme(savedTheme);
+  } catch(e) {}
+
   if (!IS_FIGMA) {
     // 1) config.json에서 공유 설정 불러오기 (팀 공통)
     const remote = await fetchRemoteConfig();
