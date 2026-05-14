@@ -745,7 +745,22 @@ async function registerBulkItem(idx) {
   var api = getApi();
   try {
     if (api) {
-      await api.registerKey({ keyName: keyName, val: textItem.characters, figmaTags: [], existingKeyId: null });
+      // 다국어 자동 번역 (Claude API Key 있을 때)
+      var bLangs = tolgeeConfig.langs && tolgeeConfig.langs.length ? tolgeeConfig.langs : ['ko-KR'];
+      var bBaseLang = bLangs[0];
+      var bTargetLangs = bLangs.slice(1);
+      var bTranslations = {};
+      bTranslations[bBaseLang] = textItem.characters;
+      var bClaudeKey = '';
+      try { bClaudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
+      if (bClaudeKey && bTargetLangs.length > 0) {
+        var bTranslated = await translateWithClaude(textItem.characters, bBaseLang, bTargetLangs);
+        bTargetLangs.forEach(function(l) { bTranslations[l] = bTranslated[l] || ''; });
+      } else {
+        bTargetLangs.forEach(function(l) { bTranslations[l] = ''; });
+      }
+
+      await api.registerKey({ keyName: keyName, val: textItem.characters, translations: bTranslations, figmaTags: [], existingKeyId: null });
       _cache = null;
 
       // 레이어 이름 변경 (IS_FIGMA + 체크박스)
@@ -1036,19 +1051,22 @@ async function translateWithClaude(text, sourceLang, targetLangs) {
   if (!apiKey || !targetLangs.length) return {};
 
   var langNames = {
-    'ko-KR':'한국어','ko':'한국어','en-US':'영어','en':'영어',
-    'ja-JP':'일본어','ja':'일본어','zh-CN':'중국어(간체)','zh-TW':'중국어(번체)',
+    'ko-KR':'Korean','ko':'Korean',
+    'en-US':'English','en':'English',
+    'ja-JP':'Japanese','ja':'Japanese',
+    'zh-CN':'Chinese (Simplified)','zh-TW':'Chinese (Traditional)',
   };
   var targetList = targetLangs.map(function(l) {
-    return (langNames[l]||l) + ' (' + l + ')';
+    return (langNames[l] || l) + ' (' + l + ')';
   }).join(', ');
 
-  var prompt = [
-    'Translate the following text from ' + (langNames[sourceLang]||sourceLang) + ' into: ' + targetList,
-    'Return ONLY a JSON object. Keys are language codes, values are translations. No explanation.',
-    'Text: "' + text + '"',
-    'Example: {"en-US": "Hello", "ja-JP": "こんにちは"}',
-  ].join(' ');
+  var prompt = 'Translate the following text from '
+    + (langNames[sourceLang] || sourceLang)
+    + ' into these languages: ' + targetList + '. '
+    + 'Return ONLY a valid JSON object where keys are the exact language codes provided and values are the translations. '
+    + 'No markdown, no explanation. '
+    + 'Text to translate: "' + text + '". '
+    + 'Expected format: ' + JSON.stringify(targetLangs.reduce(function(acc, l) { acc[l] = '...'; return acc; }, {}));
 
   try {
     var res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1490,6 +1508,11 @@ async function regKey(){
       } else if(renameChk && renameChk.checked) {
         showToast('레이어 이름 변경 실패 — 텍스트 레이어를 먼저 선택해주세요');
       }
+      // 스크린샷 첨부 (체크박스 + 프레임 선택 시)
+      var screenshotChk = document.getElementById('screenshot-chk');
+      if (IS_FIGMA && screenshotChk && screenshotChk.checked && selectedFrames.length > 0) {
+        await uploadScreenshotForKey(a, keyToRegister);
+      }
       toFigma({type:'notify',message:'키 등록: ' + keyToRegister});
     }else{showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요');}
   }catch(e){showToast('오류: ' + e.message);}
@@ -1543,51 +1566,67 @@ async function uploadScreenshotForKey(api, keyName) {
     try{_cache=await api.fetchAllKeys();_cacheTime=Date.now();cached=_cache.find(function(item){return item.key===keyName;});}catch(e){}
   }
   if (!cached||!cached.keyId) { console.warn('스크린샷: keyId 없음', keyName); return; }
+
   var keyId = cached.keyId;
   var frame = selectedFrames[0];
-  toFigma({type:'export-screenshot', frameId:frame.id});
-  window._screenshotCallback = async function(msg) {
-    window._screenshotCallback = null;
-    try {
-      var binary = atob(msg.base64);
-      var bytes = new Uint8Array(binary.length);
-      for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      var blob = new Blob([bytes], {type:'image/png'});
 
-      // Step 1: POST /v2/image-upload
-      var formData1 = new FormData();
-      formData1.append('image', blob, (frame.name||'screenshot')+'.png');
-      var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
-        method:'POST', credentials:'omit',
-        headers:{'X-API-Key':api.apiKey},
-        body:formData1,
-      });
-      if (!uploadRes.ok) {
-        var e1 = await uploadRes.json().catch(function(){return {};});
-        throw new Error('이미지 업로드 실패: '+uploadRes.status+' '+JSON.stringify(e1));
-      }
-      var uploadData = await uploadRes.json();
-      var imageUploadId = uploadData.id;
+  // Promise로 감싸서 await가 완료될 때까지 대기
+  return new Promise(function(resolve) {
+    toFigma({type:'export-screenshot', frameId:frame.id});
+    window._screenshotCallback = async function(msg) {
+      window._screenshotCallback = null;
+      try {
+        var binary = atob(msg.base64);
+        var bytes = new Uint8Array(binary.length);
+        for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        var blob = new Blob([bytes], {type:'image/png'});
 
-      // Step 2: POST /v2/projects/{id}/keys/{keyId}/screenshots
-      var linkRes = await fetch(
-        api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
-        {
+        // Step 1: POST /v2/image-upload
+        var formData1 = new FormData();
+        formData1.append('image', blob, (frame.name||'screenshot')+'.png');
+        var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
           method:'POST', credentials:'omit',
-          headers:{'X-API-Key':api.apiKey,'Content-Type':'application/json'},
-          body:JSON.stringify({uploadedImageId:imageUploadId}),
+          headers:{'X-API-Key':api.apiKey},
+          body:formData1,
+        });
+        if (!uploadRes.ok) {
+          var e1 = await uploadRes.json().catch(function(){return {};});
+          throw new Error('이미지 업로드 실패: '+uploadRes.status+' '+JSON.stringify(e1));
         }
-      );
-      if (!linkRes.ok) {
-        var e2 = await linkRes.json().catch(function(){return {};});
-        throw new Error('키 연결 실패: '+linkRes.status+' '+JSON.stringify(e2));
+        var uploadData = await uploadRes.json();
+        var imageUploadId = uploadData.id;
+
+        // Step 2: POST /v2/projects/{id}/keys/{keyId}/screenshots
+        var linkRes = await fetch(
+          api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
+          {
+            method:'POST', credentials:'omit',
+            headers:{'X-API-Key':api.apiKey,'Content-Type':'application/json'},
+            body:JSON.stringify({uploadedImageId:imageUploadId}),
+          }
+        );
+        if (!linkRes.ok) {
+          var e2 = await linkRes.json().catch(function(){return {};});
+          throw new Error('키 연결 실패: '+linkRes.status+' '+JSON.stringify(e2));
+        }
+        showToast('✓ 스크린샷 첨부 완료');
+      } catch(e) {
+        console.warn('스크린샷 오류:', e.message);
+        showToast('스크린샷 실패: '+e.message);
+      } finally {
+        resolve();
       }
-      showToast('✓ 스크린샷 첨부 완료');
-    } catch(e) {
-      console.warn('스크린샷 오류:', e.message);
-      showToast('스크린샷 실패: '+e.message);
-    }
-  };
+    };
+
+    // 타임아웃 — 10초 안에 code.js에서 응답 없으면 포기
+    setTimeout(function() {
+      if (window._screenshotCallback) {
+        window._screenshotCallback = null;
+        console.warn('스크린샷 타임아웃');
+        resolve();
+      }
+    }, 10000);
+  });
 }
 
 
