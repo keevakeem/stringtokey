@@ -134,18 +134,23 @@ select{cursor:pointer}
 
 <div class="plugin-wrap">
 <div class="tabs">
-  <button class="tab active" onclick="sw('keys')">🔑 문자열 키</button>
-  <button class="tab figma-only" onclick="sw('replace')" style="display:none">🌐 언어 교체</button>
-  <button class="tab figma-only" onclick="sw('rename')" style="display:none">✏️ 프레임 이름</button>
-  <button class="tab" onclick="sw('settings')">⚙️ 설정</button>
+  <button class="tab active" onclick="sw('keys')">문자열 키</button>
+  <button class="tab figma-only" onclick="sw('replace')" style="display:none">언어 교체</button>
+  <button class="tab figma-only" onclick="sw('rename')" style="display:none">프레임 이름</button>
+  <button class="tab" onclick="sw('manage')">관리</button>
+  <button class="tab" onclick="sw('settings')">설정</button>
 </div>
 
 <!-- ══ 문자열 키 ══ -->
 <div class="tab-panel active" id="tab-keys">
+  <!-- 화면 선택 (단일/일괄 공통) -->
+  <div class="lbl">화면</div>
+  <div style="margin-bottom:10px"><select id="screen-sel"></select></div>
+
   <!-- 모드 전환 -->
   <div style="display:flex;gap:6px;margin-bottom:12px">
-    <button id="mode-single" class="btn-p" style="flex:1;padding:7px;font-size:12px" onclick="setMode('single')">단일 검색</button>
-    <button id="mode-bulk"   class="btn-s" style="flex:1;padding:7px;font-size:12px" onclick="setMode('bulk')">프레임 일괄 <span id="bulk-badge" style="display:none;background:#fff;color:var(--text);border-radius:20px;padding:1px 6px;font-size:10px;margin-left:4px">0</span></button>
+    <button id="mode-single" class="btn-p" style="flex:1;padding:7px;font-size:12px" onclick="setMode('single')">문자열 검색</button>
+    <button id="mode-bulk"   class="btn-s" style="flex:1;padding:7px;font-size:12px" onclick="setMode('bulk')">화면 내 문구 등록 <span id="bulk-badge" style="display:none;background:#fff;color:var(--text);border-radius:20px;padding:1px 6px;font-size:10px;margin-left:4px">0</span></button>
   </div>
 
   <!-- 단일 검색 영역 -->
@@ -154,19 +159,12 @@ select{cursor:pointer}
       <strong id="hint-text"></strong>
       <span id="hint-frame"></span>
     </div>
-    <div class="lbl">화면</div>
-  <div style="margin-bottom:10px"><select id="screen-sel"></select></div>
   <div class="lbl">문자열</div>
   <div class="row"><input type="text" id="str-input" placeholder="문자열 입력 (예: 다음으로)"></div>
 
-  <div class="thresh-row">
-    <span>재사용</span>
-    <input type="range" id="tr-r" min="50" max="99" value="85" oninput="uT()">
-    <span class="tv" id="tv-r">85%</span>
-    <span style="margin-left:8px">유사</span>
-    <input type="range" id="tr-s" min="30" max="84" value="50" oninput="uT()">
-    <span class="tv" id="tv-s">50%</span>
-  </div>
+  <!-- 재사용/유사도 슬라이더는 설정 탭으로 이동 (숨김 처리) -->
+  <input type="hidden" id="tr-r" value="85">
+  <input type="hidden" id="tr-s" value="50">
   <button class="btn-p" id="search-btn" onclick="doSearch()">
     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     유사 문자열 검색
@@ -252,86 +250,8 @@ select{cursor:pointer}
   </div>
 </div>
 
-<!-- ══ 설정 ══ -->
-<div class="tab-panel" id="tab-settings">
-  <!-- Claude API Key -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-    <div class="lbl" style="margin:0">Claude API</div>
-    <span class="saved-badge" id="claude-saved">저장됨</span>
-  </div>
-  <div class="info-box" style="margin-bottom:8px;font-size:11px">
-    Figma 레이어 맥락을 보고 <strong>더 정확한 키를 추천</strong>해요.<br>
-    없으면 규칙 기반으로 추천돼요.
-  </div>
-  <div style="margin-bottom:8px">
-    <div class="lbl" style="margin-bottom:4px">API Key (개인)</div>
-    <input type="password" id="claude-key" placeholder="sk-ant-..." style="font-family:var(--mono);font-size:11px">
-  </div>
-  <div style="margin-bottom:14px">
-    <button class="btn-p" style="width:auto;padding:8px 16px;font-size:12px" onclick="saveClaudeKey()">저장</button>
-  </div>
-  <div class="divider"></div>
-
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div class="lbl" style="margin:0">Tolgee 연결</div>
-    <span class="saved-badge" id="tolgee-saved">저장됨</span>
-  </div>
-  <div class="info-box" style="margin-bottom:8px;font-size:11px">
-    URL·Project ID는 <strong>config.json</strong>에서 자동으로 불러와요.<br>
-    API Key만 개인별로 한 번 입력하면 저장돼요.
-  </div>
-  <div class="row" style="margin-bottom:8px">
-    <div>
-      <div class="lbl" style="margin-bottom:4px">API URL <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
-      <input type="text" id="cfg-url" disabled>
-    </div>
-    <div>
-      <div class="lbl" style="margin-bottom:4px">Project ID <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
-      <input type="text" id="cfg-project" disabled>
-    </div>
-  </div>
-  <div style="margin-bottom:10px">
-    <div class="lbl" style="margin-bottom:4px">API Key <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(개인 입력)</span></div>
-    <input type="text" id="cfg-key" placeholder="tgpak_..." style="font-family:var(--mono);font-size:11px">
-  </div>
-  <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveTolgee()">저장</button>
-    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="testTolgee()">연결 테스트</button>
-  </div>
-  <div class="divider"></div>
-
-  <!-- GitHub 설정 -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div class="lbl" style="margin:0">GitHub 설정</div>
-    <span class="saved-badge" id="gh-saved">저장됨</span>
-  </div>
-  <div class="info-box" style="margin-bottom:8px;font-size:11px">
-    Owner·Repo·Branch는 <strong>config.json</strong>에서 자동으로 불러와요.<br>
-    토큰만 개인별로 한 번 입력하면 이 기기에 저장돼요.
-  </div>
-  <div style="margin-bottom:7px"><div class="lbl" style="margin-bottom:4px">Personal Access Token</div>
-    <input type="password" id="gh-token" placeholder="ghp_..." style="font-family:var(--mono);font-size:11px">
-  </div>
-  <div class="row" style="margin-bottom:7px">
-    <div>
-      <div class="lbl" style="margin-bottom:4px">Owner <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
-      <input type="text" id="gh-owner" disabled>
-    </div>
-    <div>
-      <div class="lbl" style="margin-bottom:4px">Repo <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
-      <input type="text" id="gh-repo" disabled>
-    </div>
-  </div>
-  <div style="margin-bottom:7px">
-    <div class="lbl" style="margin-bottom:4px">Branch <span style="color:var(--text-3);font-weight:400;text-transform:none;letter-spacing:0">(config.json)</span></div>
-    <input type="text" id="gh-branch" disabled style="max-width:120px">
-  </div>
-  <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveGithubSettings()">토큰 저장</button>
-    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="syncFromGithub()">지금 동기화</button>
-  </div>
-
-  <div class="divider"></div>
+<!-- ══ 관리 ══ -->
+<div class="tab-panel" id="tab-manage">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="lbl" style="margin:0">화면 목록</div>
     <span class="saved-badge" id="screen-saved">저장됨</span>
@@ -354,6 +274,79 @@ select{cursor:pointer}
     <input type="text" id="fm-name" placeholder="이름 (예: 온보딩)">
     <button class="btn-s" style="flex:none;padding:8px 12px;font-size:12px;white-space:nowrap" onclick="addFeat()">추가</button>
   </div>
+</div>
+
+<!-- ══ 설정 ══ -->
+<div class="tab-panel" id="tab-settings">
+
+  <!-- Claude API Key -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="lbl" style="margin:0">Claude API Key</div>
+    <span class="saved-badge" id="claude-saved">저장됨</span>
+  </div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">
+    키 추천·자동 번역에 사용돼요. 없으면 규칙 기반으로 동작해요.
+  </div>
+  <div style="margin-bottom:8px">
+    <input type="password" id="claude-key" placeholder="sk-ant-..." style="font-family:var(--mono);font-size:11px">
+  </div>
+  <div style="margin-bottom:14px">
+    <button class="btn-p" style="width:auto;padding:8px 16px;font-size:12px" onclick="saveClaudeKey()">저장</button>
+  </div>
+  <div class="divider"></div>
+
+  <!-- Tolgee -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="lbl" style="margin:0">Tolgee API Key</div>
+    <span class="saved-badge" id="tolgee-saved">저장됨</span>
+  </div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">
+    URL·Project ID는 <strong>config.json</strong>에서 자동으로 불러와요.
+  </div>
+  <div style="margin-bottom:8px">
+    <input type="text" id="cfg-key" placeholder="tgpak_..." style="font-family:var(--mono);font-size:11px">
+  </div>
+  <!-- 숨김 필드 (JS에서 참조) -->
+  <input type="hidden" id="cfg-url">
+  <input type="hidden" id="cfg-project">
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveTolgee()">저장</button>
+    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="testTolgee()">연결 테스트</button>
+  </div>
+  <div class="divider"></div>
+
+  <!-- GitHub -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div class="lbl" style="margin:0">GitHub Token</div>
+    <span class="saved-badge" id="gh-saved">저장됨</span>
+  </div>
+  <div class="info-box" style="margin-bottom:8px;font-size:11px">
+    Owner·Repo·Branch는 <strong>config.json</strong>에서 자동으로 불러와요.
+  </div>
+  <!-- 숨김 필드 (JS에서 참조) -->
+  <input type="hidden" id="gh-owner">
+  <input type="hidden" id="gh-repo">
+  <input type="hidden" id="gh-branch">
+  <div style="margin-bottom:8px">
+    <input type="password" id="gh-token" placeholder="ghp_..." style="font-family:var(--mono);font-size:11px">
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn-p" style="flex:1;min-width:80px;padding:8px 16px;font-size:12px" onclick="saveGithubSettings()">저장</button>
+    <button class="btn-s" style="flex:1;min-width:100px;padding:8px 16px;font-size:12px" onclick="syncFromGithub()">지금 동기화</button>
+  </div>
+  <div class="divider"></div>
+
+  <!-- 유사도 임계값 -->
+  <div class="lbl" style="margin-bottom:6px">유사도 임계값</div>
+  <div class="thresh-row" style="margin-bottom:14px">
+    <span>재사용</span>
+    <input type="range" id="tr-r" min="50" max="99" value="85" oninput="uT()">
+    <span class="tv" id="tv-r">85%</span>
+    <span style="margin-left:8px">유사</span>
+    <input type="range" id="tr-s" min="30" max="84" value="50" oninput="uT()">
+    <span class="tv" id="tv-s">50%</span>
+  </div>
+
 </div>
 
 </div><!-- /plugin-wrap -->
@@ -644,8 +637,12 @@ function applySelection(msg) {
     currentTextNodeId = texts[0].id || null;
     currentTopFrameNames = msg.topFrameNames || (texts[0].topFrameName ? [texts[0].topFrameName] : []);
     currentTopFrameId = texts[0].topFrameId || null;
-    // hint-box에 nodeId 저장 — 검색 후에도 유지
-    document.getElementById('hint-box').dataset.nodeId = texts[0].id || '';
+    // hint-box에 값 고정 저장 — 검색 후 선택 해제돼도 유지
+    var hintBox = document.getElementById('hint-box');
+    hintBox.dataset.nodeId = texts[0].id || '';
+    hintBox.dataset.topFrameId = texts[0].topFrameId || '';
+    hintBox.dataset.topFrameName = texts[0].topFrameName || '';
+    hintBox.dataset.layerContext = texts[0].context ? JSON.stringify(texts[0].context) : '';
     // 프레임 이름 힌트 표시
     if (currentTopFrameNames.length > 0) {
       document.getElementById('hint-frame').textContent = '📱 ' + currentTopFrameNames.join(', ');
@@ -818,7 +815,7 @@ async function refreshBulk() {
 
 function sw(t) {
   document.querySelectorAll('.tab').forEach(function(el) {
-    const tabs = ['keys','replace','rename','settings'];
+    const tabs = ['keys','replace','rename','manage','settings'];
     const idx = Array.from(document.querySelectorAll('.tab')).indexOf(el);
     el.classList.toggle('active', tabs[idx] === t);
   });
@@ -1238,8 +1235,10 @@ function uT(){
   const r=parseInt(document.getElementById('tr-r').value);
   let s=parseInt(document.getElementById('tr-s').value);
   if(s>=r){s=r-1;document.getElementById('tr-s').value=s;}
-  document.getElementById('tv-r').textContent=r+'%';
-  document.getElementById('tv-s').textContent=s+'%';
+  const tvR=document.getElementById('tv-r');
+  const tvS=document.getElementById('tv-s');
+  if(tvR) tvR.textContent=r+'%';
+  if(tvS) tvS.textContent=s+'%';
 }
 function getThresh(){return{reuse:parseInt(document.getElementById('tr-r').value),sim:parseInt(document.getElementById('tr-s').value)};}
 function sc(v){document.getElementById('str-input').value=v;}
@@ -1248,6 +1247,15 @@ function sc(v){document.getElementById('str-input').value=v;}
 async function doSearch(){
   const val=document.getElementById('str-input').value.trim();
   if(!val){showToast('문자열을 입력해주세요');return;}
+  // 검색 시점에 hint-box dataset에서 값 복원
+  var hintBox = document.getElementById('hint-box');
+  if (hintBox.dataset.topFrameId) currentTopFrameId = hintBox.dataset.topFrameId;
+  if (hintBox.dataset.topFrameName && currentTopFrameNames.length === 0) {
+    currentTopFrameNames = [hintBox.dataset.topFrameName];
+  }
+  if (hintBox.dataset.layerContext && !layerContext) {
+    try { layerContext = JSON.parse(hintBox.dataset.layerContext); } catch(e) {}
+  }
   const btn=document.getElementById('search-btn');
   btn.innerHTML='<span class="ld"><span></span><span></span><span></span></span>';btn.disabled=true;
   selKey=null;selVal=null;selTags=[];selExistingKeyId=null;
@@ -1521,8 +1529,12 @@ async function regKey(){
       var screenshotChk = document.getElementById('screenshot-chk');
       if (IS_FIGMA && screenshotChk && screenshotChk.checked) {
         // selectedFrames 우선, 없으면 텍스트의 최상위 프레임 ID 사용
-        var ssFrameId = selectedFrames.length ? selectedFrames[0].id : currentTopFrameId;
-        var ssFrameName = selectedFrames.length ? selectedFrames[0].name : (currentTopFrameNames[0] || keyToRegister);
+        var hintDs = document.getElementById('hint-box').dataset;
+        var ssFrameId = selectedFrames.length ? selectedFrames[0].id
+          : currentTopFrameId || hintDs.topFrameId || null;
+        var ssFrameName = selectedFrames.length ? selectedFrames[0].name
+          : (currentTopFrameNames[0] || hintDs.topFrameName || keyToRegister);
+        console.log('[SKT] screenshot frameId:', ssFrameId, 'frameName:', ssFrameName);
         if (ssFrameId) {
           await uploadScreenshotForKey(a, keyToRegister, ssFrameId, ssFrameName);
         }
