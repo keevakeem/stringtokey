@@ -76,72 +76,84 @@ Tolgee API / Claude API (선택)
 #### screen (필수)
 IA 기준 화면 식별자. `config.json`의 `screenList`에 등록된 값만 사용.
 
-| 값 | 설명 |
-|---|---|
-| `common` | 여러 화면에서 공통으로 쓰이는 문자열 |
-| `onboarding` | 온보딩 플로우 |
-| `home` | 홈 피드 |
-| `profile` | 프로필 |
-| `settings` | 설정 |
-| `payment` | 결제 |
-
-> 새 화면 추가는 플러그인 설정 탭 → 화면 목록에서 관리
+> 현재 디자이너 합의 대기 중. 플러그인 설정 탭 → 화면 목록에서 관리.
 
 #### section (선택)
 한 화면에 논리적 구역이 여러 개일 때 사용.
 ```
-onboarding.name_input
-onboarding.email_input
+home.header
+settings.list
 ```
 
 #### component (필수)
-UI 요소 종류. 아래 약어만 사용.
+UI 요소 종류. 아래 값만 허용.
 
-| 약어 | 의미 |
+| 값 | 의미 |
 |---|---|
 | `btn` | 버튼 |
 | `label` | 텍스트, 제목, 설명 |
 | `input` | 입력 필드 |
-| `toast` | 토스트 메시지 |
-| `modal` | 모달 |
+| `toast` | 토스트 |
+| `snackbar` | 스낵바 |
+| `modal` | 모달, 팝업, 다이얼로그 |
 | `tab` | 탭 |
+| `chip` | 칩 |
+| `banner` | 배너 |
+| `segmented` | 세그먼티드 컨트롤 |
+| `sheet` | 바텀시트 |
+| `list` | 리스트 |
+| `card` | 카드 |
+| `image` | 이미지 |
+| `link` | 링크 |
+| `switch` | 스위치/토글 |
+| `checkbox` | 체크박스 |
+| `radio` | 라디오 |
 
 #### element (선택)
 컴포넌트 내 역할.
 
 | 값 | 의미 |
 |---|---|
+| `search` | 검색 |
+| `notification` | 알림 |
+| `password` | 비밀번호 |
+| `title` | 제목 |
+| `description` | 설명 |
 | `cta` | 주요 진행 액션 (다음, 시작, 완료) |
 | `save` | 저장 |
 | `cancel` | 취소 |
-| `confirm` | 확인/동의 |
+| `confirm` | 확인 |
 | `delete` | 삭제 |
-| `placeholder` | 입력 필드 안내 텍스트 |
-| `title` | 제목 |
-| `description` | 설명 |
+| `close` | 닫기 |
+| `back` | 이전/뒤로 |
 
 #### state (선택)
 상태나 변형.
 
 | 값 | 의미 |
 |---|---|
-| `error` | 오류 상태 |
+| `error` | 오류 |
 | `empty` | 빈 상태 |
-| `loading` | 로딩 상태 |
-| `success` | 성공 상태 |
-| `disabled` | 비활성 상태 |
+| `loading` | 로딩 |
+| `success` | 성공 |
+| `disabled` | 비활성 |
+| `placeholder` | 입력 안내 |
+| `hint` | 힌트/도움말 |
+| `pressed` | 눌린 상태 |
+| `focused` | 포커스 상태 |
+| `selected` | 선택된 상태 |
 
 ### 예시
 
 | 상황 | 키 |
 |---|---|
-| 온보딩 이름 입력 화면 제목 | `onboarding.name_input.label.title` |
-| 온보딩 다음 버튼 | `onboarding.name_input.btn.cta` |
-| 이름 미입력 에러 메시지 | `onboarding.name_input.input.error` |
-| 홈 피드 빈 상태 | `home.feed.label.empty` |
-| 결제 실패 토스트 | `payment.toast.error` |
+| 홈 헤더 검색 버튼 | `home.header.btn.search` |
+| 설정 알림 목록 비활성 | `settings.list.label.notification.disabled` |
+| 로그인 비밀번호 입력 오류 | `login.input.password.error` |
 | 공통 확인 버튼 | `common.btn.confirm` |
+| 공통 취소 버튼 | `common.btn.cancel` |
 | 공통 네트워크 에러 | `common.label.error` |
+| 온보딩 이름 입력 placeholder | `onboarding.name_input.input.placeholder` |
 
 ### 공통(common) 처리 원칙
 
@@ -367,6 +379,16 @@ Figma 화면 번호 체계: `{기능}.{버전}.{순서}`
 ---
 
 ## 저장소 정책
+
+### 플랫폼별 키 변환 규칙
+
+키는 Tolgee에 dot(`.`) 그대로 저장하며, 플랫폼별로 변환해서 사용해요.
+
+| 플랫폼 | 변환 | 예시 |
+|---|---|---|
+| Tolgee (SoT) | dot 그대로 | `home.header.btn.search` |
+| iOS | dot 그대로 | `home.header.btn.search` |
+| Android | `.` → `_` | `home_header_btn_search` |
 
 ### Tolgee가 Source of Truth
 
