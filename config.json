@@ -11,7 +11,9 @@
   },
   "screenList": [
     "common",
-    "signup", "onboarding", "billing", "home", "plan", "record", "insight", "reports", "settings"
+    "signup", "onboarding", "billing", "home", "plan", 
+    "record.insulin", "record.workout",
+     "insight", "reports", "settings"
   ],
   "tolgee": {
     "url": "https://dev-global.kakaohealthcare.com",

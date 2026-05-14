@@ -1619,33 +1619,22 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
         var blob = new Blob([bytes], {type:'image/png'});
 
-        // Step 1: POST /v2/image-upload
+        // POST /v2/projects/{id}/keys/{keyId}/screenshots (multipart, field: screenshot)
+        // Tolgee v2: 한 번에 업로드+연결
         var formData1 = new FormData();
-        formData1.append('image', blob, (frameName||'screenshot')+'.png');
-        var uploadRes = await fetch(api.baseUrl+'/v2/image-upload', {
-          method:'POST', credentials:'omit',
-          headers:{'X-API-Key':api.apiKey},
-          body:formData1,
-        });
-        if (!uploadRes.ok) {
-          var e1 = await uploadRes.json().catch(function(){return {};});
-          throw new Error('이미지 업로드 실패: '+uploadRes.status+' '+JSON.stringify(e1));
-        }
-        var uploadData = await uploadRes.json();
-        var imageUploadId = uploadData.id;
-
-        // Step 2: POST /v2/projects/{id}/keys/{keyId}/screenshots
+        formData1.append('screenshot', blob, (frameName||'screenshot')+'.png');
         var linkRes = await fetch(
           api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
           {
             method:'POST', credentials:'omit',
-            headers:{'X-API-Key':api.apiKey,'Content-Type':'application/json'},
-            body:JSON.stringify({uploadedImageId:imageUploadId}),
+            headers:{'X-API-Key':api.apiKey},
+            body:formData1,
           }
         );
+        console.log('[SKT] screenshot upload status:', linkRes.status);
         if (!linkRes.ok) {
           var e2 = await linkRes.json().catch(function(){return {};});
-          throw new Error('키 연결 실패: '+linkRes.status+' '+JSON.stringify(e2));
+          throw new Error('스크린샷 업로드 실패: '+linkRes.status+' '+JSON.stringify(e2));
         }
         showToast('✓ 스크린샷 첨부 완료');
       } catch(e) {
