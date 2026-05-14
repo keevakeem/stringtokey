@@ -8,12 +8,7 @@
   },
   "screenList": [
     "common",
-    "onboarding",
-    "home",
-    "profile",
-    "settings",
-    "payment",
-    "search"
+    "signup", "onboarding", "billing", "home", "plan", "record", "insight", "reports", "settings"
   ],
   "tolgee": {
     "url": "https://dev-global.kakaohealthcare.com",
