@@ -1262,44 +1262,26 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
 
   var ruleCandidates = genKeyCandidates(screen, val, layerContext);
 
-  // Claude API Key 없으면 규칙 기반으로
+  // Claude API Key 없으면 규칙 기반으로 즉시 반환
   if (!apiKey) return withDupeCheck(ruleCandidates, existingKeys);
 
-  // 맥락 정보 구성
-  var contextLines = [];
+  // 맥락 정보 — 핵심만
+  var ctx = [];
   if (layerContext) {
-    if (layerContext.componentName) contextLines.push('Component: ' + layerContext.componentName);
-    if (layerContext.parents && layerContext.parents.length) contextLines.push('Parent layers: ' + layerContext.parents.join(' > '));
-    if (layerContext.siblings && layerContext.siblings.length) contextLines.push('Sibling texts: ' + layerContext.siblings.join(', '));
+    if (layerContext.componentName) ctx.push('comp:' + layerContext.componentName);
+    if (layerContext.parents && layerContext.parents.length) ctx.push('parents:' + layerContext.parents.slice(0,3).join('>'));
   }
-  var contextStr = contextLines.length ? contextLines.join(' | ') : '(no layer context)';
+  var ctxStr = ctx.join(', ') || 'none';
 
-  var keyExamples = existingKeys.slice(0, 30).map(function(k) { return k.key; }).join(', ');
-  var ruleSuggestions = ruleCandidates.join(', ');
+  // 기존 키 5개만 (일관성 참고용)
+  var keyExamples = existingKeys.slice(0, 5).map(function(k){return k.key;}).join(', ');
 
-  var prompt = [
-    'You are an i18n key naming expert. Suggest 3 key names based on the rules and context.',
-    '',
-    'Key rules:',
-    '- Format: {screen}.{section?}.{component}.{element?}.{state?}',
-    '- snake_case, dot separator',
-    '- component: btn, label, input, toast, modal, tab',
-    '- element: cta, save, cancel, confirm, delete, placeholder, title, description',
-    '- state: error, empty, loading, success',
-    '',
-    'Current screen: ' + screen,
-    'String: "' + val + '"',
-    'Figma layer context:',
-    contextStr,
-    '',
-    'Rule-based suggestions (use as reference): ' + ruleSuggestions,
-    '',
-    'Existing keys (for consistency):',
-    keyExamples,
-    '',
-    'Return ONLY a JSON array of exactly 3 key strings. No explanation.',
-    'Example: ["onboarding.name_input.btn.cta", "onboarding.btn.next", "common.btn.cta"]',
-  ].join(' ');
+  var prompt = 'i18n key naming. Screen:"' + screen + '" String:"' + val + '" Context:' + ctxStr
+    + ' Rules:{screen}.{component}.{element?}.{state?} camelCase segments.'
+    + ' Components:btn,label,input,toast,modal,tab,chip,sheet,card. Elements:cta,save,cancel,confirm,delete,title,description.'
+    + ' Rule-based hints:' + ruleCandidates.join(',')
+    + ' Existing keys sample:' + keyExamples
+    + ' Return ONLY JSON array of 3 keys. Example:["home.btn.save","home.header.btn.save","common.btn.save"]';
 
   try {
     var res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1311,23 +1293,23 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
+        model: 'claude-haiku-4-5-20251001', // 빠른 모델 사용
+        max_tokens: 80,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
-    if (!res.ok) throw new Error('Claude API ' + res.status);
     var data = await res.json();
-    var text = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
-    var match = text.match(/\[[\s\S]*?\]/);
-    if (!match) throw new Error('parse error');
-    var keys = JSON.parse(match[0]);
-    if (!Array.isArray(keys) || keys.length === 0) throw new Error('empty result');
-    return withDupeCheck(keys.slice(0, 3), existingKeys);
+    var text = (data.content && data.content[0] && data.content[0].text) || '';
+    var clean = text.replace(/```json|```/g, '').trim();
+    var parsed = JSON.parse(clean);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return withDupeCheck(parsed, existingKeys);
+    }
   } catch(e) {
-    console.warn('Claude 추천 실패, 규칙 기반 사용:', e.message);
-    return withDupeCheck(ruleCandidates, existingKeys);
+    console.warn('[SKT] Claude 추천 실패, 규칙 기반으로 fallback:', e.message);
   }
+
+  return withDupeCheck(ruleCandidates, existingKeys);
 }
 
 // 중복 키 체크 후 표시
@@ -1586,12 +1568,23 @@ async function renderResults(inputVal,results,thresh){
 
   // Claude 추천 비동기 로드
   const existingKeys = (await getCached()) || MOCK_DB;
-  const suggestions = await recommendKeysWithClaude(scr, inputVal, existingKeys);
+  // 규칙 기반 먼저 즉시 표시
+  const ruleCands = genKeyCandidates(scr, inputVal, layerContext);
   const loadingEl = document.getElementById('claude-loading');
   const suggestEl = document.getElementById('claude-suggestions');
   if (loadingEl) loadingEl.style.display = 'none';
   if (suggestEl) {
     suggestEl.style.display = 'block';
+    renderSuggestions(suggestEl, withDupeCheck(ruleCands, existingKeys), inputVal);
+  }
+
+  // Claude 추천 — 비동기로 개선 (있을 때만)
+  var claudeKey = '';
+  try { claudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
+  const suggestions = claudeKey
+    ? await recommendKeysWithClaude(scr, inputVal, existingKeys)
+    : withDupeCheck(ruleCands, existingKeys);
+  if (suggestEl) {
     renderSuggestions(suggestEl, suggestions, inputVal);
     if (suggestions[0]) {
       const firstKey = typeof suggestions[0] === 'object' ? suggestions[0].key : suggestions[0];
