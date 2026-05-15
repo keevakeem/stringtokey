@@ -162,6 +162,13 @@ select{cursor:pointer}
 .bulk-item .reg-btn:disabled{opacity:.4;cursor:not-allowed}
 .bulk-item .done-mark{font-size:11px;color:var(--green);font-family:var(--mono)}
 .mode-active{background:var(--text)!important;color:#fff!important;border-color:var(--text)!important}
+.bulk-item-exists{border-color:var(--amber) !important}
+.onboard-item{display:flex;align-items:center;gap:10px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.onboard-item .check{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.onboard-item .check.done{background:var(--green-bg);color:var(--green)}
+.onboard-item .check.todo{background:var(--surface-2);color:var(--text-4);border:1px solid var(--border)}
+.onboard-item .label{font-size:13px;font-weight:500;color:var(--text)}
+.onboard-item .desc{font-size:11px;color:var(--text-4);margin-top:1px}
 .rep-item{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:5px;font-size:12px}
 .rep-item .rep-from{color:var(--text-2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rep-item .rep-arrow{color:var(--text-3);flex-shrink:0}
@@ -409,6 +416,21 @@ select{cursor:pointer}
 
 </div><!-- /plugin-wrap -->
 <div class="toast" id="toast"></div>
+
+<!-- 온보딩 오버레이 -->
+<div id="onboarding-overlay" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;justify-content:center;padding:24px">
+  <div style="margin-bottom:24px">
+    <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:8px">시작하기 전에</div>
+    <div style="font-size:13px;color:var(--text-3);line-height:1.7">
+      플러그인을 사용하려면 API 키 3개가 필요해요.<br>설정 탭에서 입력할 수 있어요.
+    </div>
+  </div>
+
+  <div id="onboarding-checklist" style="margin-bottom:24px;display:flex;flex-direction:column;gap:10px"></div>
+
+  <button class="btn-p" onclick="goToSettings()" style="width:100%">설정 탭으로 이동</button>
+  <button onclick="dismissOnboarding()" style="margin-top:8px;background:none;border:none;color:var(--text-4);font-size:12px;cursor:pointer;padding:8px;font-family:var(--sans)">나중에 입력하기</button>
+</div>
 
 <script>
 // ── 상태 ──────────────────────────────────────────────────────────────────────
@@ -763,29 +785,71 @@ async function renderBulkList() {
 
   // 각 문자열에 대해 키 추천
   var items = [];
+  var usedKeys = {}; // 이미 추천된 키 추적 (중복 방지)
   for (var i = 0; i < bulkTexts.length; i++) {
     var t = bulkTexts[i];
-    // layerContext를 각 텍스트의 context로 설정
-    layerContext = t.context || null;
+    if (!t) { items.push(null); continue; }
+
+    // layerContext를 로컬 변수로 캡처 — 비동기 중 덮어쓰기 방지
+    var localContext = t.context || null;
+    layerContext = localContext;
+
     var candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
-    var suggestedKey = candidates[0] ? (typeof candidates[0] === 'object' ? candidates[0].key : candidates[0]) : genKey(scr, t.characters);
+
+    // 후보 키 중 아직 사용되지 않은 것 선택
+    var suggestedKey = null;
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var cand = typeof candidates[ci] === 'object' ? candidates[ci].key : candidates[ci];
+      if (cand && !usedKeys[cand]) {
+        suggestedKey = cand;
+        break;
+      }
+    }
+
+    // 모든 후보가 중복이면 첫 번째 후보에 인덱스 suffix 추가
+    if (!suggestedKey) {
+      var base = candidates[0] ? (typeof candidates[0] === 'object' ? candidates[0].key : candidates[0]) : genKey(scr, t.characters, localContext);
+      suggestedKey = base + '_' + (i + 1);
+    }
+
+    usedKeys[suggestedKey] = true;
+    layerContext = null;
     items.push({ text: t.characters, key: suggestedKey, idx: i });
   }
   layerContext = null;
 
   list.innerHTML = '';
   items.forEach(function(item) {
+    if (!item) return;
+
+    var existingMatch = existingKeys.find(function(k) {
+      return k.val && k.val.trim() === item.text.trim();
+    });
+
     var div = document.createElement('div');
-    div.className = 'bulk-item';
+    div.className = 'bulk-item' + (existingMatch ? ' bulk-item-exists' : '');
     div.id = 'bulk-item-' + item.idx;
+
+    var existingBadge = existingMatch
+      ? '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;background:var(--amber-bg);border-radius:6px">'
+        + '<span style="font-size:10px;color:var(--amber)">이미 등록됨</span>'
+        + '<span style="font-family:var(--mono);font-size:10px;color:var(--amber);font-weight:500">' + existingMatch.key + '</span>'
+        + '</div>'
+      : '';
+
+    var keyVal = existingMatch ? existingMatch.key : item.key;
+    var regBtnLabel = existingMatch ? '재사용' : '등록';
+    var regBtnStyle = existingMatch ? 'background:var(--btn-s-bg);color:var(--text-2)' : '';
+
     div.innerHTML = [
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
         '<div class="val" style="margin:0">' + item.text + '</div>',
         '<button onclick="excludeBulkItem(' + item.idx + ')" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="제외">×</button>',
       '</div>',
+      existingBadge,
       '<div class="key-row">',
-        '<input class="key-edit" id="bulk-key-' + item.idx + '" value="' + item.key + '">',
-        '<button class="reg-btn" onclick="registerBulkItem(' + item.idx + ')">등록</button>',
+        '<input class="key-edit" id="bulk-key-' + item.idx + '" value="' + keyVal + '">',
+        '<button class="reg-btn" onclick="registerBulkItem(' + item.idx + ')" style="' + regBtnStyle + '">' + regBtnLabel + '</button>',
         '<span class="done-mark" id="bulk-done-' + item.idx + '" style="display:none">✓</span>',
       '</div>',
     ].join('');
@@ -854,10 +918,8 @@ async function registerBulkItem(idx) {
       // 스크린샷 첨부 (IS_FIGMA + 체크박스 + 해당 텍스트의 최상위 프레임)
       var screenshotChk = document.getElementById('screenshot-chk');
       if (IS_FIGMA && screenshotChk && screenshotChk.checked && textItem.topFrameId) {
-        var prevFrames = selectedFrames;
-        selectedFrames = [{ id: textItem.topFrameId, name: textItem.topFrameName || keyName }];
-        await uploadScreenshotForKey(api, keyName);
-        selectedFrames = prevFrames;
+        // 해당 텍스트 레이어의 정확한 위치를 전달
+        await uploadScreenshotForKey(api, keyName, textItem.topFrameId, textItem.topFrameName || keyName, textItem.id);
       }
     }
     itemEl.classList.add('done');
@@ -958,6 +1020,7 @@ function saveGithubSettings() {
   try { localStorage.setItem('skt_gh_token', token); } catch(e) {}
   showBadge('gh-saved');
   showToast('GitHub 토큰이 저장됐어요');
+  recheckOnboarding();
 }
 
 async function syncFromGithub() {
@@ -997,6 +1060,7 @@ function saveTolgee() {
   try { localStorage.setItem('skt_tolgee_apikey', apiKey); } catch(e) {}
   if (IS_FIGMA) toFigma({ type:'save-tolgee-config', config: tolgeeConfig });
   showBadge('tolgee-saved');
+  recheckOnboarding();
 }
 async function testTolgee() {
   saveTolgee();
@@ -1090,16 +1154,30 @@ class TolgeeAPI{
     return p.json();
   }
   async registerKey({keyName,val,translations=null,figmaTags=[],existingKeyId=null}){
-    var description = figmaTags.length ? 'Figma: ' + figmaTags.join(', ') : '';
     if(existingKeyId){
-      if(description){
+      // 기존 키 — description에서 기존 화면 목록 가져와서 병합 후 정렬
+      if(figmaTags.length){
+        var keyDetail = await this._fetch(
+          this.baseUrl+'/v2/projects/'+this.projectId+'/keys/'+existingKeyId,
+          {method:'GET'}
+        ).then(function(r){return r.json();}).catch(function(){return {};});
+        var existingDesc = (keyDetail.description || '');
+        var existingTags = [];
+        var m = existingDesc.match(/Figma:\s*(.+)/);
+        if(m) existingTags = m[1].split(',').map(function(s){return s.trim();}).filter(Boolean);
+        // 새 태그 병합 + 중복 제거 + 정렬
+        figmaTags.forEach(function(t){ if(existingTags.indexOf(t)===-1) existingTags.push(t); });
+        existingTags.sort();
+        var mergedDesc = 'Figma: ' + existingTags.join(', ');
         await this._fetch(
           this.baseUrl+'/v2/projects/'+this.projectId+'/keys/'+existingKeyId,
-          {method:'PATCH', body:JSON.stringify({description:description})}
+          {method:'PATCH', body:JSON.stringify({description:mergedDesc})}
         );
       }
       return{type:'tag-added',keyName};
     }
+    // 신규 키 — description 새로 생성
+    var description = figmaTags.length ? 'Figma: ' + figmaTags.slice().sort().join(', ') : '';
     // translations가 외부에서 제공되지 않으면 기본 언어만 등록
     if(!translations){
       translations={};
@@ -1182,7 +1260,7 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
   var apiKey = '';
   try { apiKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
 
-  var ruleCandidates = genKeyCandidates(screen, val);
+  var ruleCandidates = genKeyCandidates(screen, val, layerContext);
 
   // Claude API Key 없으면 규칙 기반으로
   if (!apiKey) return withDupeCheck(ruleCandidates, existingKeys);
@@ -1275,29 +1353,71 @@ function matchRule(val, ruleMap) {
 }
 
 // 규칙 기반으로 키 후보 3개 생성
-function genKeyCandidates(scr, val) {
-  var comp  = matchRule(val, keyRules.component) || 'label';
-  var elem  = matchRule(val, keyRules.element)   || '';
-  var state = matchRule(val, keyRules.state)      || '';
+function genKeyCandidates(scr, val, ctx) {
+  // ctx: layerContext { componentName, parents, siblings }
+  ctx = ctx || layerContext || {};
+
+  // 1. 맥락에서 컴포넌트 힌트 추출
+  var ctxComp = '';
+  var parentStr = ((ctx.parents || []).join(' ') + ' ' + (ctx.componentName || '')).toLowerCase();
+  var compHints = {
+    btn:      ['button', 'btn', 'cta', 'fab'],
+    input:    ['textfield', 'input', 'field', 'search', 'textarea'],
+    modal:    ['modal', 'dialog', 'popup', 'alert', 'bottom sheet'],
+    toast:    ['toast', 'snackbar'],
+    tab:      ['tab', 'tabbar'],
+    label:    ['label', 'text', 'heading', 'title', 'description'],
+    sheet:    ['sheet', 'bottomsheet', 'drawer'],
+    card:     ['card', 'cell', 'item', 'row'],
+  };
+  Object.keys(compHints).forEach(function(c) {
+    if (ctxComp) return;
+    compHints[c].forEach(function(hint) {
+      if (!ctxComp && parentStr.indexOf(hint) !== -1) ctxComp = c;
+    });
+  });
+
+  // 2. 규칙 기반
+  var ruleComp  = matchRule(val, keyRules.component) || 'label';
+  var ruleElem  = matchRule(val, keyRules.element)   || '';
+  var ruleState = matchRule(val, keyRules.state)      || '';
+
+  // 맥락 컴포넌트 우선, 없으면 규칙 기반
+  var comp = ctxComp || ruleComp;
+  var elem = ruleElem;
+  var state = ruleState;
+
+  // 3. 형제 텍스트에서 추가 힌트
+  var siblings = ctx.siblings || [];
+  // 형제에 입력 관련 단어 있으면 placeholder 추론
+  if (siblings.some(function(s){ return /입력|검색|placeholder/i.test(s); })) {
+    if (!elem) elem = 'placeholder';
+  }
 
   var results = [];
 
-  // 후보 1: screen.component.element (가장 구체적)
+  // 후보 1: screen.component.element|state
   if (elem) {
-    results.push([scr, comp, elem].join('.'));
+    results.push(joinKey([scr, comp, elem]));
   } else if (state) {
-    results.push([scr, comp, state].join('.'));
+    results.push(joinKey([scr, comp, state]));
   } else {
-    results.push([scr, comp].join('.'));
+    results.push(joinKey([scr, comp]));
   }
 
-  // 후보 2: screen.component (elem/state 없이 간결하게)
-  var c2 = [scr, comp].join('.');
-  if (results.indexOf(c2) === -1) results.push(c2);
+  // 후보 2: 맥락 컴포넌트와 규칙 컴포넌트가 다를 때 규칙 기반도 제시
+  if (ctxComp && ctxComp !== ruleComp) {
+    var alt = elem ? joinKey([scr, ruleComp, elem]) : joinKey([scr, ruleComp]);
+    if (results.indexOf(alt) === -1) results.push(alt);
+  } else {
+    // 후보 2: element 없는 간결한 버전
+    var c2 = joinKey([scr, comp]);
+    if (results.indexOf(c2) === -1) results.push(c2);
+  }
 
-  // 후보 3: common.component.element (공통 화면 버전)
+  // 후보 3: common 버전
   if (scr !== 'common') {
-    var c3 = elem ? ['common', comp, elem].join('.') : ['common', comp].join('.');
+    var c3 = elem ? joinKey(['common', comp, elem]) : joinKey(['common', comp]);
     if (results.indexOf(c3) === -1) results.push(c3);
   }
 
@@ -1305,8 +1425,8 @@ function genKeyCandidates(scr, val) {
 }
 
 // 단일 키 생성 (fallback용)
-function genKey(scr, val) {
-  return genKeyCandidates(scr, val)[0] || scr + '.label';
+function genKey(scr, val, ctx) {
+  return genKeyCandidates(scr, val, ctx)[0] || scr + '.label';
 }
 function uT(){
   const r=parseInt(document.getElementById('tr-r').value);
@@ -1548,6 +1668,7 @@ function showConfirm(key,val){
         selTags.push(name);
       }
     });
+    selTags.sort(); // 화면 이름 정렬
   }
   uCT();
   document.getElementById('confirm-box').classList.add('visible');
@@ -1607,13 +1728,12 @@ async function regKey(){
       if (IS_FIGMA && screenshotChk && screenshotChk.checked) {
         // selectedFrames 우선, 없으면 텍스트의 최상위 프레임 ID 사용
         var hintDs = document.getElementById('hint-box').dataset;
-        var ssFrameId = selectedFrames.length ? selectedFrames[0].id
-          : currentTopFrameId || hintDs.topFrameId || null;
-        var ssFrameName = selectedFrames.length ? selectedFrames[0].name
-          : (currentTopFrameNames[0] || hintDs.topFrameName || keyToRegister);
-        console.log('[SKT] screenshot frameId:', ssFrameId, 'frameName:', ssFrameName);
-        if (ssFrameId) {
-          await uploadScreenshotForKey(a, keyToRegister, ssFrameId, ssFrameName);
+        var ssFrames = selectedFrames.length ? selectedFrames
+          : (currentTopFrameId ? [{id:currentTopFrameId, name:currentTopFrameNames[0]||keyToRegister}]
+          : (hintDs.topFrameId ? [{id:hintDs.topFrameId, name:hintDs.topFrameName||keyToRegister}] : []));
+        var ssTextNodeId = currentTextNodeId || hintDs.nodeId || null;
+        if (ssFrames.length > 0) {
+          await uploadScreenshotsForAllFrames(a, keyToRegister, ssFrames, ssTextNodeId);
         }
       }
       toFigma({type:'notify',message:'키 등록: ' + keyToRegister});
@@ -1664,16 +1784,34 @@ document.getElementById('feat-ver').addEventListener('input',renderPreview);
 // ── 키 등록 시 스크린샷 업로드 ──────────────────────────────────────────────────
 function handleScreenshotReady(msg) {
   console.log('[SKT] screenshot-ready received, base64 len:', msg.base64 ? msg.base64.length : 0);
+  // 등록된 콜백 중 가장 먼저 등록된 것을 실행
+  if (window._screenshotCallbacks) {
+    var keys = Object.keys(window._screenshotCallbacks);
+    if (keys.length > 0) {
+      var firstKey = keys.sort()[0];
+      var cb = window._screenshotCallbacks[firstKey];
+      delete window._screenshotCallbacks[firstKey];
+      if (cb) cb(msg);
+      return;
+    }
+  }
+  // 구버전 단일 콜백 호환
   if (window._screenshotCallback) {
     window._screenshotCallback(msg);
     window._screenshotCallback = null;
   } else {
-    console.warn('[SKT] _screenshotCallback is null — missed callback');
+    console.warn('[SKT] screenshot callback 없음');
   }
 }
 
-async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFrameName) {
-  // overrideFrameId가 있으면 우선 사용, 없으면 selectedFrames[0]
+async function uploadScreenshotsForAllFrames(api, keyName, frames, textNodeId) {
+  // 여러 프레임에 각각 스크린샷 업로드
+  for (var fi = 0; fi < frames.length; fi++) {
+    await uploadScreenshotForKey(api, keyName, frames[fi].id, frames[fi].name, textNodeId);
+  }
+}
+
+async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFrameName, textNodeId) {
   var frameId = overrideFrameId || (selectedFrames.length ? selectedFrames[0].id : null);
   var frameName = overrideFrameName || (selectedFrames.length ? selectedFrames[0].name : keyName);
   if (!frameId) { console.warn('[SKT] 스크린샷: frameId 없음'); return; }
@@ -1681,63 +1819,38 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
   if (!cached||!cached.keyId) {
     try{_cache=await api.fetchAllKeys();_cacheTime=Date.now();cached=_cache.find(function(item){return item.key===keyName;});}catch(e){}
   }
-  if (!cached||!cached.keyId) { console.warn('스크린샷: keyId 없음', keyName); return; }
-
+  if (!cached||!cached.keyId) { console.warn('[SKT] 스크린샷: keyId 없음', keyName); return; }
   var keyId = cached.keyId;
-
-  // Promise로 감싸서 await가 완료될 때까지 대기
+  var callbackId = 'ss_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
   return new Promise(function(resolve) {
-    toFigma({type:'export-screenshot', frameId:frameId});
-    window._screenshotCallback = async function(msg) {
-      window._screenshotCallback = null;
+    toFigma({type:'export-screenshot', frameId:frameId, textNodeId: textNodeId||null});
+    window._screenshotCallbacks = window._screenshotCallbacks || {};
+    window._screenshotCallbacks[callbackId] = async function(msg) {
+      delete window._screenshotCallbacks[callbackId];
       try {
         var binary = atob(msg.base64);
         var bytes = new Uint8Array(binary.length);
-        for (var i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        for (var i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
         var blob = new Blob([bytes], {type:'image/png'});
-
-        // POST /v2/projects/:id/keys/:keyId/screenshots (multipart)
-        // 키 위치 정보를 JSON으로 같이 전송
-        var keyPositions = msg.keyPositions || [];
-        var thisKeyPos = keyPositions.find(function(p) { return p.key === keyName; });
-
-        var formData1 = new FormData();
-        formData1.append('screenshot', blob, (frameName||'screenshot')+'.png');
-        if (thisKeyPos) {
-          formData1.append('positions', JSON.stringify([{
-            x: thisKeyPos.x, y: thisKeyPos.y,
-            width: thisKeyPos.width, height: thisKeyPos.height,
-          }]));
+        // 위치 결정: targetPosition(정확한 노드) → keyPositions(키 이름 매칭) 순서
+        var pos = msg.targetPosition
+          || (msg.keyPositions||[]).find(function(p){return p.key===keyName;});
+        var fd = new FormData();
+        fd.append('screenshot', blob, (frameName||'screenshot')+'.png');
+        if (pos) {
+          fd.append('positions', JSON.stringify([{x:pos.x, y:pos.y, width:pos.width, height:pos.height}]));
         }
-
-        var linkRes = await fetch(
-          api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
-          {
-            method:'POST', credentials:'omit',
-            headers:{'X-API-Key':api.apiKey},
-            body:formData1,
-          }
-        );
-        console.log('[SKT] screenshot upload status:', linkRes.status);
-        if (!linkRes.ok) {
-          var e2 = await linkRes.json().catch(function(){return {};});
-          throw new Error('스크린샷 업로드 실패: '+linkRes.status+' '+JSON.stringify(e2));
-        }
-        showToast('✓ 스크린샷 첨부 완료');
-      } catch(e) {
-        console.warn('스크린샷 오류:', e.message);
-        showToast('스크린샷 실패: '+e.message);
-      } finally {
-        resolve();
-      }
+        var res = await fetch(api.baseUrl+'/v2/projects/'+api.projectId+'/keys/'+keyId+'/screenshots',
+          {method:'POST',credentials:'omit',headers:{'X-API-Key':api.apiKey},body:fd});
+        console.log('[SKT] screenshot status:', res.status, 'key:', keyName);
+        if (!res.ok) { var e=await res.json().catch(function(){return {};}); throw new Error('스크린샷 실패: '+res.status+' '+JSON.stringify(e)); }
+        showToast('✓ 스크린샷 첨부');
+      } catch(e) { console.warn('[SKT] 스크린샷 오류:', e.message); showToast('스크린샷 실패: '+e.message); }
+      finally { resolve(); }
     };
-
-    // 타임아웃 — 10초 안에 code.js에서 응답 없으면 포기
     setTimeout(function() {
-      if (window._screenshotCallback) {
-        window._screenshotCallback = null;
-        console.warn('스크린샷 타임아웃');
-        resolve();
+      if (window._screenshotCallbacks && window._screenshotCallbacks[callbackId]) {
+        delete window._screenshotCallbacks[callbackId]; console.warn('[SKT] 타임아웃:', keyName); resolve();
       }
     }, 10000);
   });
@@ -1848,6 +1961,59 @@ function setTheme(mode) {
     darkBtn.style.color = mode === 'dark' ? 'var(--on-btn)' : 'var(--text-3)';
     lightBtn.style.background = mode === 'light' ? 'var(--btn-bg)' : 'transparent';
     lightBtn.style.color = mode === 'light' ? 'var(--on-btn)' : 'var(--text-3)';
+  }
+}
+
+// ── 온보딩 ────────────────────────────────────────────────────────────────────
+function checkApiStatus() {
+  var claudeKey = '';
+  var tolgeeKey = '';
+  var ghToken = '';
+  try {
+    claudeKey = localStorage.getItem('skt_claude_key') || '';
+    tolgeeKey  = localStorage.getItem('skt_tolgee_apikey') || '';
+    ghToken    = localStorage.getItem('skt_gh_token') || '';
+  } catch(e) {}
+  return {
+    claude:  { done: !!claudeKey,  label: 'Claude API Key',  desc: '키 추천·자동 번역 (선택)' },
+    tolgee:  { done: !!tolgeeKey,  label: 'Tolgee API Key',  desc: '키 조회·등록 (필수)' },
+    github:  { done: !!ghToken,    label: 'GitHub Token',    desc: 'config.json 저장 (필수)' },
+  };
+}
+
+function showOnboardingIfNeeded() {
+  var status = checkApiStatus();
+  // tolgee, github 둘 다 없을 때만 온보딩 표시 (claude는 선택사항)
+  if (status.tolgee.done && status.github.done) return;
+
+  var overlay = document.getElementById('onboarding-overlay');
+  var checklist = document.getElementById('onboarding-checklist');
+  if (!overlay || !checklist) return;
+
+  checklist.innerHTML = Object.values(status).map(function(s) {
+    return '<div class="onboard-item">'
+      + '<div class="check ' + (s.done ? 'done' : 'todo') + '">' + (s.done ? '✓' : '·') + '</div>'
+      + '<div><div class="label">' + s.label + '</div><div class="desc">' + s.desc + '</div></div>'
+      + '</div>';
+  }).join('');
+
+  overlay.style.display = 'flex';
+}
+
+function goToSettings() {
+  document.getElementById('onboarding-overlay').style.display = 'none';
+  sw('settings');
+}
+
+function dismissOnboarding() {
+  document.getElementById('onboarding-overlay').style.display = 'none';
+}
+
+// 설정 저장 후 온보딩 재확인
+function recheckOnboarding() {
+  var status = checkApiStatus();
+  if (status.tolgee.done && status.github.done) {
+    document.getElementById('onboarding-overlay').style.display = 'none';
   }
 }
 
