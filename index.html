@@ -642,7 +642,7 @@ function handleFigmaMsg(msg) {
           renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
         }
         // API Key는 clientStorage에서 (Figma) 또는 localStorage에서 (브라우저)
-        const savedKey = msg.tolgeeConfig?.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
+        const savedKey = msg.tolgeeConfig?.apiKey || localStorage.getItem('skt_tolgee_apikey') || (msg.savedKeys && msg.savedKeys.tolgeeApiKey) || '';
         tolgeeConfig.apiKey = savedKey;
         document.getElementById('cfg-url').value     = tolgeeConfig.url || '';
         document.getElementById('cfg-project').value = tolgeeConfig.projectId || '';
@@ -1018,6 +1018,12 @@ function saveGithubSettings() {
   // token만 저장, owner/repo/branch는 config.json에서 관리
   const token = document.getElementById('gh-token').value.trim();
   try { localStorage.setItem('skt_gh_token', token); } catch(e) {}
+  if (IS_FIGMA) {
+    toFigma({ type: 'save-storage', key: 'skt_gh_token', value: token });
+    if (document.getElementById('gh-owner').value) toFigma({ type: 'save-storage', key: 'skt_gh_owner', value: document.getElementById('gh-owner').value });
+    if (document.getElementById('gh-repo').value)  toFigma({ type: 'save-storage', key: 'skt_gh_repo',  value: document.getElementById('gh-repo').value });
+    if (document.getElementById('gh-branch').value) toFigma({ type: 'save-storage', key: 'skt_gh_branch', value: document.getElementById('gh-branch').value });
+  }
   showBadge('gh-saved');
   showToast('GitHub 토큰이 저장됐어요');
   recheckOnboarding();
@@ -1047,6 +1053,7 @@ function saveClaudeKey() {
 function saveClaudeKey() {
   var key = document.getElementById('claude-key').value.trim();
   try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
+  if (IS_FIGMA) toFigma({ type: 'save-storage', key: 'skt_claude_key', value: key });
   showBadge('claude-saved');
   showToast('Claude API Key가 저장됐어요');
 }
@@ -1058,7 +1065,10 @@ function saveTolgee() {
   _api = null; _cache = null; _cacheTime = 0;
   // API Key는 localStorage에 저장 (Figma/브라우저 공통)
   try { localStorage.setItem('skt_tolgee_apikey', apiKey); } catch(e) {}
-  if (IS_FIGMA) toFigma({ type:'save-tolgee-config', config: tolgeeConfig });
+  if (IS_FIGMA) {
+    toFigma({ type:'save-tolgee-config', config: tolgeeConfig });
+    toFigma({ type:'save-storage', key:'skt_tolgee_apikey', value: apiKey });
+  }
   showBadge('tolgee-saved');
   recheckOnboarding();
 }
@@ -1954,6 +1964,7 @@ function doReplace() {
 function setTheme(mode) {
   document.documentElement.setAttribute('data-theme', mode);
   try { localStorage.setItem('skt_theme', mode); } catch(e) {}
+  if (IS_FIGMA) toFigma({ type: 'save-storage', key: 'skt_theme', value: mode });
   var darkBtn = document.getElementById('theme-dark');
   var lightBtn = document.getElementById('theme-light');
   if (darkBtn && lightBtn) {
