@@ -1439,9 +1439,12 @@ async function doSearch(){
   try{
     let db;
     const a=getApi();
+    console.log('[SKT] doSearch start, api:', !!a, 'cache:', !!_cache, 'cacheAge:', _cacheTime ? Math.round((Date.now()-_cacheTime)/1000)+'s' : 'none');
     if(a){
       try{
+        const t0=Date.now();
         db=await getCached();
+        console.log('[SKT] getCached done in', Date.now()-t0, 'ms, keys:', db?.length);
         if(!db||db.length===0) db=MOCK_DB;
       }catch(e){
         const msg=e.message||'';
@@ -1498,6 +1501,7 @@ function rmTag(cId,idx){
 
 // ── 결과 렌더 ────────────────────────────────────────────────────────────────
 async function renderResults(inputVal,results,thresh,allKeys){
+  console.log('[SKT] renderResults called, results:', results.length, 'allKeys:', allKeys?.length);
   const scr=document.getElementById('screen-sel').value;
   const area=document.getElementById('key-results');
   let html='';
@@ -1563,27 +1567,36 @@ async function renderResults(inputVal,results,thresh,allKeys){
   cnWrap.addEventListener('click', function() { selN(this, inputVal); });
 
   const existingKeys = allKeys || MOCK_DB;
-  // 규칙 기반 먼저 즉시 표시
   const ruleCands = genKeyCandidates(scr, inputVal, layerContext);
+  const ruleResults = withDupeCheck(ruleCands, existingKeys);
+  console.log('[SKT] renderResults - ruleCands:', ruleCands, 'screen:', scr, 'val:', inputVal);
+
   const loadingEl = document.getElementById('claude-loading');
   const suggestEl = document.getElementById('claude-suggestions');
   if (loadingEl) loadingEl.style.display = 'none';
   if (suggestEl) {
     suggestEl.style.display = 'block';
-    renderSuggestions(suggestEl, withDupeCheck(ruleCands, existingKeys), inputVal);
+    renderSuggestions(suggestEl, ruleResults, inputVal);
+    if (ruleResults[0]) {
+      var k0 = typeof ruleResults[0]==='object' ? ruleResults[0].key : ruleResults[0];
+      if (k0) { var nki=document.getElementById('nki'); if(nki) nki.value=k0; selKey=k0; }
+    }
   }
+  console.log('[SKT] rule suggestions shown:', ruleResults);
 
-  // Claude 추천 — 완전 백그라운드 (기다리지 않음)
+  // Claude Key 있으면 백그라운드로 개선
   var claudeKey = '';
   try { claudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
+  console.log('[SKT] claudeKey:', !!claudeKey);
   if (claudeKey) {
     recommendKeysWithClaude(scr, inputVal, existingKeys).then(function(suggestions) {
+      console.log('[SKT] claude suggestions:', suggestions);
       if (suggestEl) renderSuggestions(suggestEl, suggestions, inputVal);
       if (suggestions[0]) {
         var k = typeof suggestions[0]==='object' ? suggestions[0].key : suggestions[0];
-        if(k) { document.getElementById('nki').value=k; selKey=k; }
+        if (k) { var nki=document.getElementById('nki'); if(nki) nki.value=k; selKey=k; }
       }
-    }).catch(function(){});
+    }).catch(function(e){ console.warn('[SKT] claude error:', e.message); });
   }
 }
 function selE(el,key,val,keyId){
