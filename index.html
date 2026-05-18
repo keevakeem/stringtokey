@@ -1256,7 +1256,7 @@ async function translateWithClaude(text, sourceLang, targetLangs) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
+        max_tokens: 80,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -1595,20 +1595,17 @@ async function renderResults(inputVal,results,thresh){
     renderSuggestions(suggestEl, withDupeCheck(ruleCands, existingKeys), inputVal);
   }
 
-  // Claude 추천 — 비동기로 개선 (있을 때만)
+  // Claude 추천 — 완전 백그라운드 (기다리지 않음)
   var claudeKey = '';
   try { claudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
-  const suggestions = claudeKey
-    ? await recommendKeysWithClaude(scr, inputVal, existingKeys)
-    : withDupeCheck(ruleCands, existingKeys);
-  if (suggestEl) {
-    renderSuggestions(suggestEl, suggestions, inputVal);
-    if (suggestions[0]) {
-      const firstKey = typeof suggestions[0] === 'object' ? suggestions[0].key : suggestions[0];
-      const nki = document.getElementById('nki');
-      if (nki) nki.value = firstKey;
-      selKey = firstKey;
-    }
+  if (claudeKey) {
+    recommendKeysWithClaude(scr, inputVal, existingKeys).then(function(suggestions) {
+      if (suggestEl) renderSuggestions(suggestEl, suggestions, inputVal);
+      if (suggestions[0]) {
+        var k = typeof suggestions[0]==='object' ? suggestions[0].key : suggestions[0];
+        if(k) { document.getElementById('nki').value=k; selKey=k; }
+      }
+    }).catch(function(){});
   }
 }
 function selE(el,key,val,keyId){
