@@ -1101,69 +1101,48 @@ class TolgeeAPI{
     });
   }
 
-  async fetchAllKeys({lang=null,pageSize=200}={}){ lang=lang||(tolgeeConfig.langs&&tolgeeConfig.langs[0])||'ko-KR';
-    let page=0,all=[],total=1;
-    while(page<total){
-      const r=await fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${page}`,{headers:this.hdr});
-      if(!r.ok)throw new Error(`Tolgee ${r.status}`);
-      const d=await r.json();total=d.page?.totalPages||1;
-      (d._embedded?.keys||[]).forEach(item=>{
+  async fetchAllKeys({lang=null,pageSize=500}={}){
+    lang = lang || (tolgeeConfig.langs && tolgeeConfig.langs[0]) || 'ko-KR';
+
+    // 1페이지 먼저 fetch해서 전체 페이지 수 파악
+    const firstRes = await fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=0`,
+      {headers: this.hdr}
+    );
+    if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
+    const firstData = await firstRes.json();
+    const totalPages = firstData.page?.totalPages || 1;
+
+    // 나머지 페이지 병렬 fetch
+    const pagePromises = [];
+    for (let p = 1; p < totalPages; p++) {
+      pagePromises.push(
+        fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${p}`, {headers: this.hdr})
+          .then(r => r.json()).catch(() => ({}))
+      );
+    }
+    const restPages = await Promise.all(pagePromises);
+    const allPages = [firstData, ...restPages];
+
+    const all = [];
+    allPages.forEach(d => {
+      (d._embedded?.keys || []).forEach(item => {
         const trans = item.translations?.[lang];
         const val = trans?.text || '';
         const state = trans?.state || '';
-        // 디버그: 첫 5개 항목 콘솔 출력
-        if (all.length < 5) {
-          console.log('[SKT] key:', item.keyName, '| lang:', lang, '| val:', val, '| state:', state, '| raw:', JSON.stringify(trans));
-        }
-        const isEmpty = !val || state === 'UNTRANSLATED';
-        const figmaTags=(item.keyTags||[]).filter(t=>t.name.startsWith('figma:')).map(t=>t.name.replace('figma:',''));
-        all.push({key:item.keyName, val: isEmpty ? '' : val, figmaTags, usage:figmaTags.length||1, keyId:item.keyId});
+        if (state === 'UNTRANSLATED') return;
+        all.push({
+          key: item.keyName,
+          keyId: item.keyId,
+          val,
+          figmaTags: (item.description||'').replace('Figma:','').split(',').map(s=>s.trim()).filter(Boolean),
+        });
       });
-      page++;
-    }
+    });
     return all;
   }
-  async createKey({keyName, translations={}, tags=[], description=''}) {
-    // POST /v2/projects/:id/keys 에 translations 포함해서 한 번에 생성
-    // Tolgee v2: translations 형식 { "ko": "텍스트값" }
-    const transBody = {};
-    Object.entries(translations).forEach(([lang, text]) => {
-      transBody[lang] = typeof text === 'object' ? text.text : text;
-    });
 
-    const body = {
-      name: keyName,
-      translations: transBody,
-      tags: tags,
-    };
-    if (description) body.description = description;
-    const r = await this._fetch(
-      `${this.baseUrl}/v2/projects/${this.projectId}/keys`,
-      { method: 'POST', body: JSON.stringify(body) }
-    );
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      throw new Error(JSON.stringify(e));
-    }
-    return r.json();
-  }
-
-  async addTags(keyId, newTags=[]) {
-    const g = await this._fetch(
-      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`
-    );
-    if (!g.ok) throw new Error('키 조회 실패: ' + g.status);
-    const kd = await g.json();
-    const existingTags = (kd.tags || []).map(t => t.name);
-    const merged = [...new Set([...existingTags, ...newTags])];
-    const p = await this._fetch(
-      `${this.baseUrl}/v2/projects/${this.projectId}/keys/${keyId}`,
-      { method: 'PATCH', body: JSON.stringify({ tags: merged.map(n => ({ name: n })) }) }
-    );
-    if (!p.ok) throw new Error('태그 업데이트 실패: ' + p.status);
-    return p.json();
-  }
-  async registerKey({keyName,val,translations=null,figmaTags=[],existingKeyId=null}){
+    async registerKey({keyName,val,translations=null,figmaTags=[],existingKeyId=null}){
     if(existingKeyId){
       // 기존 키 — description에서 기존 화면 목록 가져와서 병합 후 정렬
       if(figmaTags.length){
@@ -1477,7 +1456,7 @@ async function doSearch(){
       db=MOCK_DB;
     }
     const res=db.map(item=>({...item,sim:sim(val,item.val)})).filter(i=>i.sim>=thresh.sim).sort((a,b)=>b.sim-a.sim).slice(0,8);
-    await renderResults(val,res,thresh);
+    await renderResults(val,res,thresh,db);
   }finally{
     btn.innerHTML='<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 유사 문자열 검색';
     btn.disabled=false;
@@ -1518,7 +1497,7 @@ function rmTag(cId,idx){
 }
 
 // ── 결과 렌더 ────────────────────────────────────────────────────────────────
-async function renderResults(inputVal,results,thresh){
+async function renderResults(inputVal,results,thresh,allKeys){
   const scr=document.getElementById('screen-sel').value;
   const area=document.getElementById('key-results');
   let html='';
@@ -1583,8 +1562,7 @@ async function renderResults(inputVal,results,thresh){
   // 카드 클릭 시 selN
   cnWrap.addEventListener('click', function() { selN(this, inputVal); });
 
-  // Claude 추천 비동기 로드
-  const existingKeys = (await getCached()) || MOCK_DB;
+  const existingKeys = allKeys || MOCK_DB;
   // 규칙 기반 먼저 즉시 표시
   const ruleCands = genKeyCandidates(scr, inputVal, layerContext);
   const loadingEl = document.getElementById('claude-loading');
