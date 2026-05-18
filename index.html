@@ -1112,6 +1112,7 @@ class TolgeeAPI{
     if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
     const firstData = await firstRes.json();
     const totalPages = firstData.page?.totalPages || 1;
+    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, 'firstPage keys:', firstData._embedded?.keys?.length, 'sample:', JSON.stringify(firstData).slice(0,200));
 
     // 나머지 페이지 병렬 fetch
     const pagePromises = [];
@@ -1318,6 +1319,14 @@ function withDupeCheck(candidates, existingKeys) {
 }
 
 // 문자열에서 키워드 매칭으로 세그먼트 찾기
+function toCamelSegment(str) {
+  return str.replace(/_([a-z])/g, function(_, c) { return c.toUpperCase(); });
+}
+
+function joinKey(parts) {
+  return parts.filter(Boolean).map(toCamelSegment).join('.');
+}
+
 function matchRule(val, ruleMap) {
   var keys = Object.keys(ruleMap);
   for (var i = 0; i < keys.length; i++) {
