@@ -1112,7 +1112,7 @@ class TolgeeAPI{
     if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
     const firstData = await firstRes.json();
     const totalPages = firstData.page?.totalPages || 1;
-    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, 'firstPage keys:', firstData._embedded?.keys?.length, 'sample:', JSON.stringify(firstData).slice(0,200));
+    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, 'firstPage keys:', firstData._embedded?.keys?.length, 'topLevelKeys:', Object.keys(firstData).join(','), 'sample:', JSON.stringify(firstData).slice(0,300));
 
     // 나머지 페이지 병렬 fetch
     const pagePromises = [];
@@ -1127,19 +1127,26 @@ class TolgeeAPI{
 
     const all = [];
     allPages.forEach(d => {
-      (d._embedded?.keys || []).forEach(item => {
+      // Tolgee 버전에 따라 응답 구조가 다를 수 있음
+      const keys = d._embedded?.keys || d.keys || d.data || [];
+      console.log('[SKT] page keys count:', keys.length, 'structure sample:', keys[0] ? JSON.stringify(keys[0]).slice(0,150) : 'empty');
+      keys.forEach(item => {
+        // keyName 또는 name 필드
+        const keyName = item.keyName || item.name || '';
+        if (!keyName) return;
         const trans = item.translations?.[lang];
-        const val = trans?.text || '';
+        const val = trans?.text || trans?.value || '';
         const state = trans?.state || '';
         if (state === 'UNTRANSLATED') return;
         all.push({
-          key: item.keyName,
-          keyId: item.keyId,
+          key: keyName,
+          keyId: item.keyId || item.id || null,
           val,
           figmaTags: (item.description||'').replace('Figma:','').split(',').map(s=>s.trim()).filter(Boolean),
         });
       });
     });
+    console.log('[SKT] fetchAllKeys total parsed:', all.length);
     return all;
   }
 
