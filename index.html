@@ -502,24 +502,27 @@ class TolgeeApi {
   }
   async fetchAllKeys({ lang=null, pageSize=500 }={}) {
     lang = lang || (tolgeeConfig.langs && tolgeeConfig.langs[0]) || 'ko-KR';
+
+    // 올바른 엔드포인트: _embedded.keys 구조 반환
     const firstRes = await fetch(
-      `${this.baseUrl}/v2/projects/${this.projectId}/translations/${lang}?size=${pageSize}&page=0`,
+      `${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=0`,
       { headers: this.hdr }
     );
     if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
     const firstData = await firstRes.json();
     const totalPages = firstData.page?.totalPages || 1;
-    console.log('[SKT] fetchAllKeys response keys:', Object.keys(firstData));
-    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, '_embedded:', !!firstData._embedded, 'keys count:', firstData._embedded?.keys?.length);
-    console.log('[SKT] fetchAllKeys sample:', JSON.stringify(firstData).slice(0, 400));
+    const embedded = firstData._embedded;
+    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, '_embedded:', !!embedded, 'keys count:', embedded?.keys?.length, 'top keys:', Object.keys(firstData));
+
     const pagePromises = [];
     for (let p = 1; p < totalPages; p++) {
       pagePromises.push(
-        fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations/${lang}?size=${pageSize}&page=${p}`, { headers: this.hdr })
+        fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations?languages=${lang}&size=${pageSize}&page=${p}`, { headers: this.hdr })
           .then(r => r.json()).catch(() => ({}))
       );
     }
     const allPages = [firstData, ...await Promise.all(pagePromises)];
+
     const all = [];
     allPages.forEach(d => {
       (d._embedded?.keys || []).forEach(item => {
@@ -527,7 +530,9 @@ class TolgeeApi {
         const val = trans?.text || '';
         if (trans?.state === 'UNTRANSLATED') return;
         all.push({
-          key: item.keyName, keyId: item.keyId, val,
+          key: item.keyName,
+          keyId: item.keyId,
+          val,
           figmaTags: (item.description||'').replace('Figma:','').split(',').map(s=>s.trim()).filter(Boolean),
         });
       });
@@ -535,6 +540,8 @@ class TolgeeApi {
     console.log('[SKT] fetchAllKeys total:', all.length);
     return all;
   }
+
+  
   async registerKey({ keyName, val, translations=null, figmaTags=[], existingKeyId=null }) {
     if (existingKeyId) {
       if (figmaTags.length) {
