@@ -210,9 +210,6 @@ select{cursor:pointer}
   <div class="lbl">문자열</div>
   <div class="row"><input type="text" id="str-input" placeholder="문자열 입력 (예: 다음으로)"></div>
 
-  <!-- 재사용/유사도 슬라이더는 설정 탭으로 이동 (숨김 처리) -->
-  <input type="hidden" id="tr-r" value="85">
-  <input type="hidden" id="tr-s" value="50">
   <button class="btn-p" id="search-btn" onclick="doSearch()" style="margin-top:4px">
     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     유사 문자열 검색
@@ -349,7 +346,7 @@ select{cursor:pointer}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div>
       <div class="lbl" style="margin-bottom:2px">화면 모드</div>
-      <div style="font-size:12px;color:var(--text-3)">다크 모드가 기본값이에요</div>
+      <div style="font-size:12px;color:var(--text-3)">라이트 모드가 기본값이에요</div>
     </div>
     <div style="display:flex;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px;gap:3px">
       <button id="theme-dark" onclick="setTheme('dark')" style="padding:4px 12px;font-size:12px;font-weight:500;border:none;border-radius:6px;cursor:pointer;background:transparent;color:var(--text-3);font-family:var(--sans)">다크</button>
@@ -374,7 +371,7 @@ select{cursor:pointer}
   </div>
   <div class="divider"></div>
 
-  <!-- Tolgee -->
+  <!-- Tolgee API Key -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
     <div class="lbl" style="margin:0">Tolgee API Key</div>
     <span class="saved-badge" id="tolgee-saved">저장됨</span>
@@ -385,33 +382,15 @@ select{cursor:pointer}
   <div style="margin-bottom:8px">
     <input type="text" id="cfg-key" placeholder="tgpak_..." style="font-family:var(--mono);font-size:11px">
   </div>
-  <!-- 숨김 필드 (JS에서 참조) -->
-  <input type="text" id="cfg-url" placeholder="https://your-tolgee-server.com" style="margin-bottom:6px;font-family:var(--mono);font-size:11px">
-  <input type="text" id="cfg-project" placeholder="Project ID (예: 3)" style="margin-bottom:6px;font-family:var(--mono);font-size:11px">
+  <input type="hidden" id="cfg-url">
+  <input type="hidden" id="cfg-project">
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn-p" style="flex:1" onclick="saveTolgee()">저장</button>
     <button class="btn-s" style="flex:1" onclick="testTolgee()">연결 테스트</button>
   </div>
-  <div class="divider"></div>
-
-  <!-- GitHub -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-    <div class="lbl" style="margin:0">GitHub Token</div>
-    <span class="saved-badge" id="gh-saved">저장됨</span>
-  </div>
-  <div class="info-box" style="margin-bottom:8px;font-size:11px">
-    Owner·Repo·Branch는 <strong>config.json</strong>에서 자동으로 불러와요.
-  </div>
-  <!-- 숨김 필드 (JS에서 참조) -->
-  <input type="hidden" id="gh-owner">
-  <input type="hidden" id="gh-repo">
-  <input type="hidden" id="gh-branch">
-  <div style="margin-bottom:8px">
-    <input type="password" id="gh-token" placeholder="ghp_..." style="font-family:var(--mono);font-size:11px">
-  </div>
-  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn-p" style="flex:1" onclick="saveGithubSettings()">저장</button>
-    <button class="btn-s" style="flex:1" onclick="syncFromGithub()">지금 동기화</button>
+  <div class="info-box" style="font-size:11px;margin-bottom:14px">
+    URL·ProjectID는 <strong>config.json</strong>에서 자동으로 불러와요.
+    <button onclick="syncFromGithub()" style="margin-left:8px;background:none;border:none;color:var(--primary);font-size:11px;cursor:pointer;padding:0;font-family:var(--sans)">↻ 지금 동기화</button>
   </div>
   <div class="divider"></div>
 
@@ -425,6 +404,13 @@ select{cursor:pointer}
     <input type="range" id="tr-s" min="30" max="84" value="50" oninput="uT()">
     <span class="tv" id="tv-s">50%</span>
   </div>
+
+  <!-- GitHub 숨김 필드 (JS 참조용) -->
+  <input type="hidden" id="gh-owner">
+  <input type="hidden" id="gh-repo">
+  <input type="hidden" id="gh-branch">
+  <input type="hidden" id="gh-token">
+  <input type="hidden" id="gh-saved">
 
 </div>
 
@@ -581,9 +567,11 @@ class TolgeeApi {
 }
 
 function getApi() {
-  const url = tolgeeConfig.url || localStorage.getItem('skt_tolgee_url') || document.getElementById('cfg-url')?.value || '';
-  const pid = tolgeeConfig.projectId || localStorage.getItem('skt_tolgee_project') || document.getElementById('cfg-project')?.value || '';
-  const key = tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || document.getElementById('cfg-key')?.value || '';
+  // URL, ProjectID는 config.json에서 → tolgeeConfig 또는 hidden 필드
+  const url = tolgeeConfig.url || document.getElementById('cfg-url')?.value || '';
+  const pid = tolgeeConfig.projectId || document.getElementById('cfg-project')?.value || '';
+  // API Key만 개인 설정 (localStorage)
+  const key = tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
   console.log('[SKT] getApi - url:', url, 'pid:', pid, 'key:', !!key);
   if (!url || !pid || !key) return null;
   return new TolgeeApi(url, pid, key);
@@ -1121,10 +1109,10 @@ async function doSearch() {
       try {
         const t0 = Date.now();
         db = await getCached();
-        console.log('[SKT] getCached in', Date.now()-t0, 'ms, keys:', db?.length);
-        if (!db?.length) db = MOCK_DB;
-      } catch(e) { db = MOCK_DB; }
-    } else db = MOCK_DB;
+        console.log('[SKT] getCached in', Date.now()-t0, 'ms, keys:', db?.length, 'sample:', db?.[0]);
+        if (!db) db = [];
+      } catch(e) { console.warn('[SKT] getCached error:', e); db = []; }
+    } else { console.warn('[SKT] no api'); db = []; }
     const res = db.map(item => ({...item, sim:sim(val, item.val)})).filter(i => i.sim >= thresh.sim).sort((a,b) => b.sim-a.sim).slice(0,8);
     await renderResults(val, res, thresh, db);
   } finally {
@@ -1155,7 +1143,7 @@ async function renderResults(inputVal, results, thresh, allKeys) {
   document.querySelectorAll('.card').forEach(card => {
     card.addEventListener('click', function() { selN(this, inputVal); });
   });
-  const existingKeys = allKeys || MOCK_DB;
+  const existingKeys = allKeys || [];
   const ruleCands = genKeyCandidates(scr, inputVal, layerContext);
   const ruleResults = withDupeCheck(ruleCands, existingKeys);
   console.log('[SKT] ruleCands:', ruleCands);
@@ -1244,9 +1232,9 @@ async function renderBulkList() {
   if (noSel) noSel.style.display = 'none';
   const scr = document.getElementById('screen-sel').value;
   list.innerHTML = '<div class="empty">키 추천 중...</div>';
-  let existingKeys = MOCK_DB;
+  let existingKeys = [];
   const a = getApi();
-  if (a) try { existingKeys = (await getCached()) || MOCK_DB; } catch(e) {}
+  if (a) try { existingKeys = (await getCached()) || []; } catch(e) {}
   const items = [];
   const usedKeys = {};
   for (let i = 0; i < bulkTexts.length; i++) {
@@ -1467,12 +1455,13 @@ function saveTolgee() {
   showBadge('tolgee-saved'); recheckOnboarding();
 }
 async function testTolgee() {
-  // 저장 전에도 입력값으로 즉시 테스트
-  const url = (document.getElementById('cfg-url')?.value || tolgeeConfig.url || localStorage.getItem('skt_tolgee_url') || '').trim();
-  const pid = (document.getElementById('cfg-project')?.value || tolgeeConfig.projectId || localStorage.getItem('skt_tolgee_project') || '').trim();
-  const key = (document.getElementById('cfg-key')?.value || tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || '').trim();
+  // URL/ProjectID는 config.json, API Key는 입력값 또는 localStorage
+  const url = tolgeeConfig.url || document.getElementById('cfg-url')?.value || '';
+  const pid = tolgeeConfig.projectId || document.getElementById('cfg-project')?.value || '';
+  const key = (document.getElementById('cfg-key')?.value || '').trim() || localStorage.getItem('skt_tolgee_apikey') || '';
   console.log('[SKT] testTolgee - url:', url, 'pid:', pid, 'key:', !!key);
-  if (!url || !pid || !key) { showToast('URL · ProjectID · API Key를 입력해주세요'); return; }
+  if (!url || !pid) { showToast('config.json에서 URL · ProjectID를 먼저 불러와주세요'); return; }
+  if (!key) { showToast('Tolgee API Key를 입력해주세요'); return; }
   const a = new TolgeeApi(url, pid, key);
   try {
     const res = await fetch(`${a.baseUrl}/v2/projects/${a.projectId}`, {headers:{'X-API-Key':a.apiKey}});
@@ -1481,7 +1470,14 @@ async function testTolgee() {
   } catch(e) { showToast('연결 오류: '+e.message); }
 }
 function getGithubConfig() {
-  try { return { token:localStorage.getItem('skt_gh_token')||'', owner:localStorage.getItem('skt_gh_owner')||'', repo:localStorage.getItem('skt_gh_repo')||'', branch:localStorage.getItem('skt_gh_branch')||'main' }; } catch(e) { return {}; }
+  try {
+    return {
+      token:  document.getElementById('gh-token')?.value?.trim()  || localStorage.getItem('skt_gh_token')  || '',
+      owner:  document.getElementById('gh-owner')?.value?.trim()  || localStorage.getItem('skt_gh_owner')  || '',
+      repo:   document.getElementById('gh-repo')?.value?.trim()   || localStorage.getItem('skt_gh_repo')   || '',
+      branch: document.getElementById('gh-branch')?.value?.trim() || localStorage.getItem('skt_gh_branch') || 'main',
+    };
+  } catch(e) { return {}; }
 }
 function saveGithubSettings() {
   const token = document.getElementById('gh-token')?.value?.trim();
@@ -1493,20 +1489,37 @@ function saveGithubSettings() {
   showBadge('gh-saved'); showToast('GitHub 토큰이 저장됐어요'); recheckOnboarding();
 }
 async function syncFromGithub() {
-  const gh = getGithubConfig();
-  if (!gh.token||!gh.owner||!gh.repo) { showToast('GitHub 설정을 먼저 저장해주세요'); return; }
+  showToast('config.json 불러오는 중...');
   try {
-    const res = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/config.json`, { headers:{'Authorization':'token '+gh.token,'Accept':'application/vnd.github.v3+json'} });
-    if (!res.ok) throw new Error(res.status+'');
-    const data = await res.json();
-    const remote = JSON.parse(atob(data.content.replace(/\n/g,'')));
-    if (remote.tolgee) { tolgeeConfig = {...tolgeeConfig, ...remote.tolgee}; document.getElementById('cfg-url').value=tolgeeConfig.url||''; document.getElementById('cfg-project').value=tolgeeConfig.projectId||''; }
-    if (remote.featureMap) { featureMap=remote.featureMap; renderFeatMap(); }
-    if (remote.screenList) { screenList=remote.screenList; renderScreenList(); renderScreenSelect(); }
-    if (remote.keyRules) keyRules=remote.keyRules;
-    if (remote.github?.owner) { localStorage.setItem('skt_gh_owner',remote.github.owner); localStorage.setItem('skt_gh_repo',remote.github.repo); localStorage.setItem('skt_gh_branch',remote.github.branch||'main'); }
-    showToast('✓ GitHub 동기화 완료');
-  } catch(e) { showToast('동기화 실패: '+e.message); }
+    // GitHub Pages에서 직접 config.json fetch (Token 불필요)
+    // 현재 페이지 origin 기준으로 config.json 절대경로 생성
+    const configUrl = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/') + 'config.json?t=' + Date.now();
+    console.log('[SKT] fetching config:', configUrl);
+    const res = await fetch(configUrl);
+    if (!res.ok) throw new Error('config.json fetch 실패: ' + res.status);
+    const remote = await res.json();
+    if (remote.tolgee) {
+      if (remote.tolgee.url) tolgeeConfig.url = remote.tolgee.url;
+      if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
+      if (remote.tolgee.langs) tolgeeConfig.langs = remote.tolgee.langs;
+      document.getElementById('cfg-url').value = tolgeeConfig.url || '';
+      document.getElementById('cfg-project').value = tolgeeConfig.projectId || '';
+    }
+    if (remote.featureMap) { featureMap = remote.featureMap; renderFeatMap(); }
+    if (remote.screenList) { screenList = remote.screenList; renderScreenList(); renderScreenSelect(); }
+    if (remote.keyRules) keyRules = remote.keyRules;
+    if (remote.github) {
+      if (remote.github.owner)  { localStorage.setItem('skt_gh_owner',  remote.github.owner);  const el=document.getElementById('gh-owner');  if(el) el.value=remote.github.owner; }
+      if (remote.github.repo)   { localStorage.setItem('skt_gh_repo',   remote.github.repo);   const el=document.getElementById('gh-repo');   if(el) el.value=remote.github.repo; }
+      if (remote.github.branch) { localStorage.setItem('skt_gh_branch', remote.github.branch); const el=document.getElementById('gh-branch'); if(el) el.value=remote.github.branch; }
+    }
+    _cache = null; // 설정 변경 시 캐시 무효화
+    showToast('✓ 동기화 완료');
+    setTimeout(warmupCache, 500);
+  } catch(e) {
+    console.error('[SKT] syncFromGithub:', e);
+    showToast('동기화 실패: ' + e.message);
+  }
 }
 
 function uT() {
@@ -1526,11 +1539,8 @@ async function initApp() {
     // localStorage에서 Tolgee 설정 먼저 복원 (syncFromGithub 실패해도 동작)
     try {
       const lsApiKey = localStorage.getItem('skt_tolgee_apikey') || '';
-      const lsUrl    = localStorage.getItem('skt_tolgee_url') || '';
-      const lsPid    = localStorage.getItem('skt_tolgee_project') || '';
+      // URL/ProjectID는 config.json에서 → syncFromGithub 후 tolgeeConfig에 세팅됨
       if (lsApiKey) tolgeeConfig.apiKey = lsApiKey;
-      if (lsUrl)    tolgeeConfig.url    = lsUrl;
-      if (lsPid)    tolgeeConfig.projectId = lsPid;
     } catch(e) {}
     // cfg-url, cfg-project 숨김 필드에서도 읽기
     const cfgUrl = document.getElementById('cfg-url')?.value;
@@ -1538,7 +1548,23 @@ async function initApp() {
     if (cfgUrl && !tolgeeConfig.url) tolgeeConfig.url = cfgUrl;
     if (cfgPid && !tolgeeConfig.projectId) tolgeeConfig.projectId = cfgPid;
 
-    await syncFromGithub().catch(()=>{});
+    // localStorage에서 GitHub 설정 복원 → 입력란 채우기
+    try {
+      const savedOwner  = localStorage.getItem('skt_gh_owner') || '';
+      const savedRepo   = localStorage.getItem('skt_gh_repo') || '';
+      const savedBranch = localStorage.getItem('skt_gh_branch') || 'main';
+      const savedToken  = localStorage.getItem('skt_gh_token') || '';
+      const savedApiKey = localStorage.getItem('skt_tolgee_apikey') || '';
+      const savedClaudeKey = localStorage.getItem('skt_claude_key') || '';
+      if (savedOwner)  { const el=document.getElementById('gh-owner');  if(el) el.value=savedOwner; }
+      if (savedRepo)   { const el=document.getElementById('gh-repo');   if(el) el.value=savedRepo; }
+      if (savedBranch) { const el=document.getElementById('gh-branch'); if(el) el.value=savedBranch; }
+      if (savedToken)  { const el=document.getElementById('gh-token');  if(el) el.value=savedToken; }
+      if (savedApiKey) { const el=document.getElementById('cfg-key');   if(el) el.value=savedApiKey; }
+      if (savedClaudeKey) { const el=document.getElementById('claude-key'); if(el) el.value=savedClaudeKey; }
+    } catch(e) {}
+    // config.json 직접 fetch (GitHub Pages URL 기준, Token 불필요)
+    await syncFromGithub().catch(e => console.warn('초기 config 로드 실패:', e.message));
     renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
     showOnboardingIfNeeded();
     setTimeout(warmupCache, 1500);
