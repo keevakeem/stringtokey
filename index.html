@@ -255,6 +255,15 @@ select{cursor:pointer}
       선택한 프레임에서 <strong id="bulk-count">0</strong>개의 문자열을 찾았어요.<br>
       키를 확인하고 일괄 등록하세요.
     </div>
+    <div id="bulk-progress" style="display:none;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--text-3)" id="bulk-progress-label">추천 중...</span>
+        <span style="font-size:11px;font-family:var(--mono);color:var(--text-2)" id="bulk-progress-count">0 / 0</span>
+      </div>
+      <div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden">
+        <div id="bulk-progress-bar" style="height:100%;background:var(--text);border-radius:2px;transition:width .3s;width:0%"></div>
+      </div>
+    </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button class="btn-p" style="flex:1" onclick="registerAll()">전체 등록</button>
       <button class="btn-s" style="flex:1" onclick="refreshBulk()">키 재추천</button>
@@ -1247,11 +1256,29 @@ async function renderBulkList() {
   if (a) try { existingKeys = (await getCached()) || []; } catch(e) {}
   const items = [];
   const usedKeys = {};
+  const total = bulkTexts.filter(Boolean).length;
+  let done = 0;
+
+  // 진행도 표시 시작
+  const progressEl = document.getElementById('bulk-progress');
+  const progressBar = document.getElementById('bulk-progress-bar');
+  const progressCount = document.getElementById('bulk-progress-count');
+  const progressLabel = document.getElementById('bulk-progress-label');
+  if (progressEl) progressEl.style.display = 'block';
+  if (progressCount) progressCount.textContent = `0 / ${total}`;
+  if (progressBar) progressBar.style.width = '0%';
+
   for (let i = 0; i < bulkTexts.length; i++) {
     const t = bulkTexts[i];
     if (!t) { items.push(null); continue; }
     const localContext = t.context || null;
     layerContext = localContext;
+
+    // 진행도 업데이트
+    if (progressLabel) progressLabel.textContent = `"${t.characters.slice(0,15)}${t.characters.length>15?'…':''}" 추천 중...`;
+    if (progressCount) progressCount.textContent = `${done} / ${total}`;
+    if (progressBar) progressBar.style.width = `${Math.round(done/total*100)}%`;
+
     const candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
     let suggestedKey = null;
     for (const cand of candidates) {
@@ -1265,7 +1292,17 @@ async function renderBulkList() {
     usedKeys[suggestedKey] = true;
     layerContext = null;
     items.push({ text:t.characters, key:suggestedKey, idx:i });
+    done++;
+
+    // 진행도 업데이트 (완료)
+    if (progressCount) progressCount.textContent = `${done} / ${total}`;
+    if (progressBar) progressBar.style.width = `${Math.round(done/total*100)}%`;
   }
+
+  // 완료
+  if (progressLabel) progressLabel.textContent = '추천 완료';
+  if (progressBar) progressBar.style.width = '100%';
+  setTimeout(() => { if (progressEl) progressEl.style.display = 'none'; }, 1500);
   list.innerHTML = '';
   items.forEach(item => {
     if (!item) return;
