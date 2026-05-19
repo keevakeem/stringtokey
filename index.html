@@ -287,12 +287,7 @@ select{cursor:pointer}
   <div id="replace-no-sel" class="no-sel">Figma 캔버스에서<br>프레임을 선택해주세요</div>
 
   <div id="replace-content" style="display:none">
-    <button class="btn-p" id="preview-btn" onclick="previewReplace()" style="margin-bottom:8px">
-      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      교체 미리보기
-    </button>
-    <div id="replace-preview" style="margin-bottom:10px"></div>
-    <button class="btn-p" id="replace-btn" onclick="doReplace()" style="display:none">
+    <button class="btn-p" onclick="doReplace()">
       ✓ 교체 적용
     </button>
   </div>
@@ -1208,6 +1203,12 @@ async function regKey() {
   if (!keyToRegister || !valToRegister) { showToast('키와 문자열을 입력해주세요'); return; }
   const tagsToRegister = [...selTags];
   const existingId = selExistingKeyId;
+  // 등록 버튼 클릭 시점에 nodeId 캡처 (이후 선택 해제돼도 유지)
+  const hintDs = document.getElementById('hint-box')?.dataset || {};
+  const capturedNodeId = currentTextNodeId || hintDs.nodeId || null;
+  const capturedTopFrameId = currentTopFrameId || hintDs.topFrameId || null;
+  const capturedTopFrameName = currentTopFrameNames[0] || hintDs.topFrameName || null;
+  const capturedFrames = selectedFrames.length ? [...selectedFrames] : (capturedTopFrameId ? [{id:capturedTopFrameId, name:capturedTopFrameName||keyToRegister}] : []);
   const a = getApi();
   if (!a) { showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요'); return; }
   try {
@@ -1230,12 +1231,8 @@ async function regKey() {
     if (shouldRenameLayer() && currentTextNodeId) toFigma({ type:'rename-layer', nodeId:currentTextNodeId, keyName:keyToRegister });
     const screenshotChk = document.getElementById('screenshot-chk');
     if (IS_FIGMA && screenshotChk?.checked) {
-      const hintDs = document.getElementById('hint-box')?.dataset || {};
-      const ssFrameId = selectedFrames.length ? selectedFrames[0].id : currentTopFrameId || hintDs.topFrameId;
-      const ssFrameName = selectedFrames.length ? selectedFrames[0].name : (currentTopFrameNames[0] || hintDs.topFrameName || keyToRegister);
-      const ssTextNodeId = currentTextNodeId || hintDs.nodeId;
-      const ssFrames = selectedFrames.length ? selectedFrames : (ssFrameId ? [{id:ssFrameId,name:ssFrameName}] : []);
-      if (ssFrames.length) await uploadScreenshotsForAllFramesWithId(a, keyToRegister, newKeyId, ssFrames, ssTextNodeId);
+      console.log('[SKT] screenshot - nodeId:', capturedNodeId, 'frames:', capturedFrames.length);
+      if (capturedFrames.length) await uploadScreenshotsForAllFramesWithId(a, keyToRegister, newKeyId, capturedFrames, capturedNodeId);
     }
     toFigma({ type:'notify', message:'키 등록: ' + keyToRegister });
   } catch(e) { showToast('오류: ' + e.message); }
@@ -1382,30 +1379,42 @@ function renderReplaceLangSelect() {
   sel.innerHTML = langs.map(l => `<option value="${l}">${l}</option>`).join('');
 }
 
-async function previewReplace() {
+async function doReplace() {
   const lang = document.getElementById('replace-lang-sel')?.value;
-  if (!lang) return;
-  const a = getApi(); if (!a) { showToast('Tolgee 설정 필요'); return; }
-  const db = await getCached().catch(() => null);
-  if (!db) { showToast('키 목록 로드 실패'); return; }
-  const preview = document.getElementById('replace-preview');
-  const btn = document.getElementById('replace-btn');
-  if (!preview) return;
-  const texts = document.querySelectorAll('[data-is-text]');
-  preview.innerHTML = '<div class="empty">미리보기 준비 중...</div>';
-  const items = [];
-  for (const frame of selectedFrames) {
-    const frameTexts = (await getFrameTextsFromFigma(frame.id)).catch(()=>[]);
-    // items 수집은 selection-changed에서 이미 됨
+  if (!lang) { showToast('교체할 언어를 선택해주세요'); return; }
+  if (!selectedFrames.length) { showToast('Figma에서 프레임을 선택해주세요'); return; }
+  const a = getApi();
+  if (!a) { showToast('Tolgee API 설정이 필요해요'); return; }
+  showToast('번역 불러오는 중...');
+  try {
+    const db = await getCached();
+    if (!db || !db.length) { showToast('키 목록을 불러올 수 없어요'); return; }
+    // lang에 해당하는 번역값 맵 생성 { keyName: translatedText }
+    const langRes = await fetch(
+      `${a.baseUrl}/v2/projects/${a.projectId}/translations?languages=${lang}&size=2000&page=0`,
+      { headers: { 'X-API-Key': a.apiKey } }
+    );
+    if (!langRes.ok) throw new Error('번역 로드 실패: ' + langRes.status);
+    const langData = await langRes.json();
+    const translations = {};
+    (langData._embedded?.keys || []).forEach(item => {
+      const trans = item.translations?.[lang];
+      if (trans?.text && trans.state !== 'UNTRANSLATED') {
+        translations[item.keyName] = trans.text;
+      }
+    });
+    console.log('[SKT] doReplace - lang:', lang, 'translations count:', Object.keys(translations).length);
+    // Figma에 교체 명령 전달
+    toFigma({
+      type: 'replace-lang',
+      frameIds: selectedFrames.map(f => f.id),
+      lang,
+      translations,
+    });
+    showToast('✓ 교체 적용 중...');
+  } catch(e) {
+    showToast('오류: ' + e.message);
   }
-  preview.innerHTML = '<div class="empty">선택된 프레임의 텍스트를 교체 미리보기해요.</div>';
-  if (btn) btn.style.display = 'block';
-}
-
-function applyReplace() {
-  const lang = document.getElementById('replace-lang-sel')?.value;
-  if (!lang || !selectedFrames.length) { showToast('프레임과 언어를 선택해주세요'); return; }
-  toFigma({ type:'replace-lang', frameIds: selectedFrames.map(f=>f.id), lang });
 }
 
 // ── 프레임 이름 변경 탭 ───────────────────────────────────────────────────────
