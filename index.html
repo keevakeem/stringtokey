@@ -433,243 +433,566 @@ select{cursor:pointer}
 </div>
 
 <script>
-// ── 상태 ──────────────────────────────────────────────────────────────────────
-// ── Storage 유틸 (Figma = clientStorage 경유, 브라우저 = localStorage) ──────
-const IS_FIGMA = window.parent !== window;  // iframe 안이면 Figma 환경
+// ── 환경 감지 ────────────────────────────────────────────────────────────────
+const IS_FIGMA = window.parent !== window;
 
+// ── Figma 메시지 ──────────────────────────────────────────────────────────────
+function toFigma(payload) {
+  if (!IS_FIGMA) return;
+  window.parent.postMessage({ source: 'app-to-figma', payload }, '*');
+}
+
+// ── 스토리지 ──────────────────────────────────────────────────────────────────
 function storageSave(key, value) {
-  if (IS_FIGMA) {
-    // Figma: ui.html → code.js → clientStorage
-    toFigma({ type: 'save-storage', key, value: JSON.stringify(value) });
-  } else {
-    try { localStorage.setItem('skt_' + key, JSON.stringify(value)); } catch(e) {}
+  if (IS_FIGMA) toFigma({ type: 'save-storage', key, value: JSON.stringify(value) });
+  else try { localStorage.setItem('skt_' + key, JSON.stringify(value)); } catch(e) {}
+}
+function storageLoad(key, fallback) {
+  if (IS_FIGMA) return fallback;
+  try { const v = localStorage.getItem('skt_' + key); return v ? JSON.parse(v) : fallback; }
+  catch(e) { return fallback; }
+}
+
+// ── 상태 ──────────────────────────────────────────────────────────────────────
+let featureMap = {}, screenList = [], tolgeeConfig = {}, keyRules = {
+  component: {
+    btn:['버튼','클릭','확인','취소','저장','다음','이전','완료','제출','등록','삭제','수정','시작','계속','닫기'],
+    input:['입력','텍스트필드','검색어'], label:['텍스트','제목','설명','안내','문구'],
+    toast:['토스트'], snackbar:['스낵바'], modal:['모달','팝업','다이얼로그'], tab:['탭'],
+    chip:['칩'], banner:['배너'], segmented:['세그먼트'], sheet:['시트','바텀시트'],
+    list:['목록','리스트'], card:['카드'], image:['이미지','사진'], link:['링크'],
+    switch:['스위치','토글'], checkbox:['체크박스'], radio:['라디오']
+  },
+  element: {
+    search:['검색'], notification:['알림','노티'], password:['비밀번호','패스워드'],
+    title:['제목','타이틀'], description:['설명','내용'], cta:['다음','시작','완료','제출','계속'],
+    save:['저장'], cancel:['취소'], confirm:['확인'], delete:['삭제'], close:['닫기'], back:['이전','뒤로']
+  },
+  state: {
+    error:['오류','실패','에러','잘못'], empty:['없어요','없습니다','비어','empty'],
+    loading:['로딩','불러오는','처리 중'], success:['성공','완료됐','됐어요'],
+    disabled:['비활성','불가'], placeholder:['입력해주세요','검색어를','placeholder'],
+    hint:['힌트','도움말'], pressed:['눌림'], focused:['포커스'], selected:['선택됨']
+  }
+};
+let selectedFrames = [], layerContext = null, currentTopFrameNames = [], currentTopFrameId = null, currentTextNodeId = null;
+let selKey = null, selVal = null, selTags = [], selExistingKeyId = null;
+let bulkMode = false, bulkTexts = [], cardTags = {};
+let _cache = null, _cacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+const MOCK_DB = [
+  {key:'common.btn.confirm', val:'확인', keyId:1}, {key:'common.btn.cancel', val:'취소', keyId:2},
+  {key:'common.btn.save', val:'저장', keyId:3}, {key:'common.label.error', val:'오류가 발생했어요', keyId:4},
+  {key:'common.btn.delete', val:'삭제', keyId:5}, {key:'onboarding.btn.next', val:'다음', keyId:6},
+  {key:'home.header.btn.search', val:'검색', keyId:7}, {key:'home.label.empty', val:'항목이 없어요', keyId:8},
+  {key:'settings.list.label.notification', val:'알림 설정', keyId:9},
+];
+
+// ── API 클래스 ────────────────────────────────────────────────────────────────
+class TolgeeApi {
+  constructor(baseUrl, projectId, apiKey) {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.projectId = projectId;
+    this.apiKey = apiKey;
+    this.hdr = { 'X-API-Key': apiKey, 'Content-Type': 'application/json' };
+  }
+  async _fetch(url, opts={}) {
+    const res = await fetch(url, { credentials:'omit', headers: this.hdr, ...opts });
+    return res;
+  }
+  async fetchAllKeys({ lang=null, pageSize=500 }={}) {
+    lang = lang || (tolgeeConfig.langs && tolgeeConfig.langs[0]) || 'ko-KR';
+    const firstRes = await fetch(
+      `${this.baseUrl}/v2/projects/${this.projectId}/translations/${lang}?size=${pageSize}&page=0`,
+      { headers: this.hdr }
+    );
+    if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
+    const firstData = await firstRes.json();
+    const totalPages = firstData.page?.totalPages || 1;
+    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, 'keys:', firstData._embedded?.keys?.length);
+    const pagePromises = [];
+    for (let p = 1; p < totalPages; p++) {
+      pagePromises.push(
+        fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations/${lang}?size=${pageSize}&page=${p}`, { headers: this.hdr })
+          .then(r => r.json()).catch(() => ({}))
+      );
+    }
+    const allPages = [firstData, ...await Promise.all(pagePromises)];
+    const all = [];
+    allPages.forEach(d => {
+      (d._embedded?.keys || []).forEach(item => {
+        const trans = item.translations?.[lang];
+        const val = trans?.text || '';
+        if (trans?.state === 'UNTRANSLATED') return;
+        all.push({
+          key: item.keyName, keyId: item.keyId, val,
+          figmaTags: (item.description||'').replace('Figma:','').split(',').map(s=>s.trim()).filter(Boolean),
+        });
+      });
+    });
+    console.log('[SKT] fetchAllKeys total:', all.length);
+    return all;
+  }
+  async registerKey({ keyName, val, translations=null, figmaTags=[], existingKeyId=null }) {
+    if (existingKeyId) {
+      if (figmaTags.length) {
+        const keyDetail = await this._fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${existingKeyId}`)
+          .then(r => r.json()).catch(() => ({}));
+        const existingDesc = keyDetail.description || '';
+        let existingTags = [];
+        const m = existingDesc.match(/Figma:\s*(.+)/);
+        if (m) existingTags = m[1].split(',').map(s => s.trim()).filter(Boolean);
+        figmaTags.forEach(t => { if (existingTags.indexOf(t) === -1) existingTags.push(t); });
+        existingTags.sort();
+        await this._fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys/${existingKeyId}`,
+          { method:'PATCH', body: JSON.stringify({ description: 'Figma: ' + existingTags.join(', ') }) });
+      }
+      return { type:'tag-added', keyName };
+    }
+    if (!translations) {
+      translations = {};
+      const langs = tolgeeConfig.langs || ['ko-KR'];
+      translations[langs[0]] = val;
+      langs.slice(1).forEach(l => translations[l] = '');
+    }
+    const description = figmaTags.length ? 'Figma: ' + figmaTags.slice().sort().join(', ') : '';
+    const body = { name: keyName, translations, description };
+    const res = await this._fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys`,
+      { method:'POST', body: JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `${res.status}`); }
+    return await res.json();
   }
 }
 
-function storageLoad(key, fallback) {
-  if (IS_FIGMA) return fallback; // Figma는 init 메시지로 받음
-  try {
-    const v = localStorage.getItem('skt_' + key);
-    return v ? JSON.parse(v) : fallback;
-  } catch(e) { return fallback; }
+function getApi() {
+  const url = tolgeeConfig.url || localStorage.getItem('skt_tolgee_url') || '';
+  const pid = tolgeeConfig.projectId || '';
+  const key = tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
+  if (!url || !pid || !key) return null;
+  return new TolgeeApi(url, pid, key);
 }
 
-// ── GitHub config.json 연동 ───────────────────────────────────────────────────
-// 토큰은 localStorage에만 보관 (코드에 절대 하드코딩 X)
-function getGithubConfig() {
+async function getCached() {
+  const a = getApi(); if (!a) return null;
+  if (_cache && Date.now() - _cacheTime < CACHE_TTL) return _cache;
+  _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); return _cache;
+}
+async function warmupCache() {
+  const a = getApi(); if (!a) return;
+  if (_cache && Date.now() - _cacheTime < CACHE_TTL) return;
+  try { _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) {}
+}
+
+// ── 유사도 ────────────────────────────────────────────────────────────────────
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length:m+1}, (_,i) => Array.from({length:n+1}, (_,j) => i===0?j:j===0?i:0));
+  for (let i=1;i<=m;i++) for (let j=1;j<=n;j++)
+    dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+function sim(a, b) {
+  if (!a || !b) return 0;
+  a = a.toLowerCase().trim(); b = b.toLowerCase().trim();
+  if (a === b) return 100;
+  const d = lev(a, b), max = Math.max(a.length, b.length);
+  return max === 0 ? 100 : Math.round((1 - d/max)*100);
+}
+function getThresh() {
+  const r = parseInt(document.getElementById('tr-r')?.value||'85');
+  const s = parseInt(document.getElementById('tr-s')?.value||'50');
+  return { reuse: r, sim: s };
+}
+
+// ── 키 규칙 ───────────────────────────────────────────────────────────────────
+function toCamelSegment(str) {
+  return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+function joinKey(parts) {
+  return parts.filter(Boolean).map(toCamelSegment).join('.');
+}
+function matchRule(val, ruleMap) {
+  const v = val.toLowerCase();
+  for (const [k, words] of Object.entries(ruleMap)) {
+    if (words.some(w => v.includes(w))) return k;
+  }
+  return null;
+}
+function genKeyCandidates(scr, val, ctx) {
+  ctx = ctx || layerContext || {};
+  let ctxComp = '';
+  const parentStr = ((ctx.parents||[]).join(' ') + ' ' + (ctx.componentName||'')).toLowerCase();
+  const compHints = {
+    btn:['button','btn','cta','fab'], input:['textfield','input','field','search','textarea'],
+    modal:['modal','dialog','popup','alert'], toast:['toast','snackbar'],
+    tab:['tab','tabbar'], label:['label','text','heading','title','description'],
+    sheet:['sheet','bottomsheet','drawer'], card:['card','cell','item','row'],
+  };
+  for (const [c, hints] of Object.entries(compHints)) {
+    if (ctxComp) break;
+    if (hints.some(h => parentStr.includes(h))) ctxComp = c;
+  }
+  const ruleComp = matchRule(val, keyRules.component) || 'label';
+  const ruleElem = matchRule(val, keyRules.element) || '';
+  const ruleState = matchRule(val, keyRules.state) || '';
+  const comp = ctxComp || ruleComp;
+  const elem = ruleElem;
+  const state = ruleState;
+  const results = [];
+  if (elem) results.push(joinKey([scr, comp, elem]));
+  else if (state) results.push(joinKey([scr, comp, state]));
+  else results.push(joinKey([scr, comp]));
+  if (ctxComp && ctxComp !== ruleComp) {
+    const alt = elem ? joinKey([scr, ruleComp, elem]) : joinKey([scr, ruleComp]);
+    if (!results.includes(alt)) results.push(alt);
+  } else {
+    const c2 = joinKey([scr, comp]);
+    if (!results.includes(c2)) results.push(c2);
+  }
+  if (scr !== 'common') {
+    const c3 = elem ? joinKey(['common', comp, elem]) : joinKey(['common', comp]);
+    if (!results.includes(c3)) results.push(c3);
+  }
+  return results.slice(0, 3);
+}
+function genKey(scr, val, ctx) { return genKeyCandidates(scr, val, ctx)[0] || scr + '.label'; }
+function withDupeCheck(candidates, existingKeys) {
+  return candidates.map(c => {
+    const k = typeof c === 'object' ? c.key : c;
+    const match = (existingKeys||[]).find(e => e.key === k);
+    return { key: k, exists: !!match, sim: 100 };
+  });
+}
+
+// ── Claude 추천 ───────────────────────────────────────────────────────────────
+async function translateWithClaude(text, sourceLang, targetLangs) {
+  let apiKey = ''; try { apiKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
+  if (!apiKey || !targetLangs.length) return {};
+  const langNames = {'ko-KR':'Korean','en-US':'English','ja-JP':'Japanese','zh-CN':'Chinese (Simplified)'};
+  const targetList = targetLangs.map(l => (langNames[l]||l) + ' (' + l + ')').join(', ');
+  const prompt = `Translate from ${langNames[sourceLang]||sourceLang} into ${targetList}. `
+    + `Return ONLY JSON with language codes as keys. Text: "${text}". `
+    + `Format: ${JSON.stringify(targetLangs.reduce((a,l)=>{a[l]='';return a},{}))}`;
   try {
-    return {
-      token:  localStorage.getItem('skt_gh_token')  || '',
-      owner:  localStorage.getItem('skt_gh_owner')  || '',
-      repo:   localStorage.getItem('skt_gh_repo')   || '',
-      branch: localStorage.getItem('skt_gh_branch') || 'main',
-    };
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', credentials:'omit',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:200, messages:[{role:'user',content:prompt}] })
+    });
+    const data = await res.json();
+    const text2 = data.content?.[0]?.text || '';
+    return JSON.parse(text2.replace(/```json|```/g,'').trim());
   } catch(e) { return {}; }
 }
 
-function saveGithubConfig(token, owner, repo, branch) {
-  try {
-    localStorage.setItem('skt_gh_token',  token);
-    localStorage.setItem('skt_gh_owner',  owner);
-    localStorage.setItem('skt_gh_repo',   repo);
-    localStorage.setItem('skt_gh_branch', branch||'main');
-  } catch(e) {}
-}
-
-// config.json을 GitHub Pages에서 fetch (캐시 무시)
-async function fetchRemoteConfig() {
-  try {
-    const res = await fetch('./config.json?t=' + Date.now());
-    if (!res.ok) throw new Error('fetch failed');
-    return await res.json();
-  } catch(e) {
-    console.warn('config.json 불러오기 실패:', e.message);
-    return null;
+async function recommendKeysWithClaude(screen, val, existingKeys) {
+  let apiKey = ''; try { apiKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
+  const ruleCandidates = genKeyCandidates(screen, val, layerContext);
+  if (!apiKey) return withDupeCheck(ruleCandidates, existingKeys);
+  const ctx = [];
+  if (layerContext) {
+    if (layerContext.componentName) ctx.push('comp:'+layerContext.componentName);
+    if (layerContext.parents?.length) ctx.push('parents:'+layerContext.parents.slice(0,3).join('>'));
   }
-}
-
-// config.json을 GitHub API로 업데이트
-async function pushConfigToGithub(data) {
-  const gh = getGithubConfig();
-  if (!gh.token || !gh.owner || !gh.repo) {
-    showToast('⚠️ GitHub 설정을 먼저 입력해주세요');
-    return false;
-  }
-  const path = 'config.json';
-  const apiBase = `https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/${path}`;
-
-  // 현재 파일의 SHA 가져오기 (업데이트에 필요)
-  let sha = '';
+  const prompt = `i18n key naming. Screen:"${screen}" String:"${val}" Context:${ctx.join(',')||'none'} `
+    + `Rules:{screen}.{component}.{element?}.{state?} camelCase. `
+    + `Components:btn,label,input,toast,modal,tab,chip,sheet,card. `
+    + `Hints:${ruleCandidates.join(',')} `
+    + `Return ONLY JSON array of 3 keys like ["home.btn.save","home.header.btn.save","common.btn.save"]`;
   try {
-    const getRes = await fetch(apiBase, {
-      headers: { 'Authorization': 'token ' + gh.token, 'Accept': 'application/vnd.github.v3+json' }
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', credentials:'omit',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:100, messages:[{role:'user',content:prompt}] })
     });
-    if (getRes.ok) { const d = await getRes.json(); sha = d.sha || ''; }
-  } catch(e) {}
+    const data = await res.json();
+    const txt = data.content?.[0]?.text || '';
+    const parsed = JSON.parse(txt.replace(/```json|```/g,'').trim());
+    if (Array.isArray(parsed) && parsed.length) return withDupeCheck(parsed, existingKeys);
+  } catch(e) { console.warn('[SKT] Claude 추천 실패:', e.message); }
+  return withDupeCheck(ruleCandidates, existingKeys);
+}
 
-  const body = {
-    message: 'chore: update config.json',
-    content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))),
-    branch:  gh.branch || 'main',
+// ── 탭 전환 ───────────────────────────────────────────────────────────────────
+function sw(t) {
+  document.querySelectorAll('.tab').forEach(function(el) {
+    const tabs = ['keys','replace','rename','manage','settings'];
+    const idx = Array.from(document.querySelectorAll('.tab')).indexOf(el);
+    el.classList.toggle('active', tabs[idx] === t);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display='none');
+  const panel = document.getElementById('tab-' + t);
+  if (panel) { panel.style.display='flex'; panel.style.flexDirection='column'; }
+  if (t === 'settings') renderSettingsBadges();
+}
+
+// ── 토스트 ────────────────────────────────────────────────────────────────────
+let _toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast'); if (!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(_toastTimer); _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+function showBadge(id) {
+  const el = document.getElementById(id); if (!el) return;
+  el.style.display='inline'; setTimeout(() => el.style.display='none', 2000);
+}
+
+// ── 온보딩 ────────────────────────────────────────────────────────────────────
+function checkApiStatus() {
+  let claudeKey='', tolgeeKey='', ghToken='';
+  try { claudeKey=localStorage.getItem('skt_claude_key')||''; tolgeeKey=localStorage.getItem('skt_tolgee_apikey')||''; ghToken=localStorage.getItem('skt_gh_token')||''; } catch(e) {}
+  return {
+    claude:{done:!!claudeKey, label:'Claude API Key', desc:'키 추천·자동 번역 (선택)'},
+    tolgee:{done:!!tolgeeKey, label:'Tolgee API Key', desc:'키 조회·등록 (필수)'},
+    github:{done:!!ghToken,   label:'GitHub Token',  desc:'config.json 저장 (필수)'},
   };
-  if (sha) body.sha = sha;
+}
+function showOnboardingIfNeeded() {
+  const status = checkApiStatus();
+  if (status.tolgee.done && status.github.done) return;
+  const overlay = document.getElementById('onboarding-overlay');
+  const checklist = document.getElementById('onboarding-checklist');
+  if (!overlay || !checklist) return;
+  checklist.innerHTML = Object.values(status).map(s =>
+    `<div class="onboard-item"><div class="check ${s.done?'done':'todo'}">${s.done?'✓':'·'}</div>`
+    +`<div><div class="label">${s.label}</div><div class="desc">${s.desc}</div></div></div>`
+  ).join('');
+  overlay.style.display = 'flex';
+}
+function goToSettings() {
+  document.getElementById('onboarding-overlay').style.display = 'none';
+  sw('settings');
+}
+function dismissOnboarding() {
+  document.getElementById('onboarding-overlay').style.display = 'none';
+}
+function recheckOnboarding() {
+  const status = checkApiStatus();
+  if (status.tolgee.done && status.github.done)
+    document.getElementById('onboarding-overlay').style.display = 'none';
+}
 
-  try {
-    const putRes = await fetch(apiBase, {
-      method: 'PUT',
-      headers: {
-        'Authorization': 'token ' + gh.token,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    if (!putRes.ok) {
-      const e = await putRes.json().catch(() => ({}));
-      throw new Error(e.message || putRes.status);
-    }
-    return true;
-  } catch(e) {
-    showToast('GitHub 저장 실패: ' + e.message);
-    return false;
+// ── 테마 ──────────────────────────────────────────────────────────────────────
+function setTheme(mode) {
+  document.documentElement.setAttribute('data-theme', mode);
+  try { localStorage.setItem('skt_theme', mode); } catch(e) {}
+  if (IS_FIGMA) toFigma({ type:'save-storage', key:'skt_theme', value:mode });
+  const darkBtn = document.getElementById('theme-dark');
+  const lightBtn = document.getElementById('theme-light');
+  if (darkBtn) { darkBtn.style.background = mode==='dark'?'var(--btn-bg)':'transparent'; darkBtn.style.color = mode==='dark'?'var(--on-btn)':'var(--text-3)'; }
+  if (lightBtn) { lightBtn.style.background = mode==='light'?'var(--btn-bg)':'transparent'; lightBtn.style.color = mode==='light'?'var(--on-btn)':'var(--text-3)'; }
+}
+
+// ── 화면 선택 ─────────────────────────────────────────────────────────────────
+function renderScreenSelect() {
+  const sel = document.getElementById('screen-sel'); if (!sel) return;
+  sel.innerHTML = (screenList.length ? screenList : ['common','home','onboarding','profile','settings'])
+    .map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+// ── 태그 UI ───────────────────────────────────────────────────────────────────
+function uCT() {
+  const wrap = document.getElementById('tag-wrap'); if (!wrap) return;
+  wrap.innerHTML = selTags.map((t,i) =>
+    `<span class="ftag">${t}<button onclick="rmTag(${i})" style="background:none;border:none;cursor:pointer;color:inherit;margin-left:3px;padding:0;font-size:10px">×</button></span>`
+  ).join('') + (IS_FIGMA ? `<button class="ftag-add" onclick="addCurFrame()">+ 현재 화면</button>` : '');
+}
+function rmTag(i) { selTags.splice(i,1); uCT(); }
+function addCurFrame() {
+  if (currentTopFrameNames.length) {
+    currentTopFrameNames.forEach(n => { if (/^\d+\.\d+\.\d+$/.test(n) && !selTags.includes(n)) selTags.push(n); });
+    selTags.sort(); uCT();
   }
 }
 
-let featureMap = {'1':'회원가입','2':'홈 피드','3':'온보딩','4':'프로필','5':'결제'};
-let keyRules = {
-  component: {
-    btn:       ['버튼','클릭','확인','취소','저장','다음','이전','완료','제출','등록','삭제','수정','시작','계속','닫기'],
-    input:     ['입력','텍스트필드','검색어'],
-    label:     ['텍스트','제목','설명','안내','문구'],
-    toast:     ['토스트'],
-    snackbar:  ['스낵바'],
-    modal:     ['모달','팝업','다이얼로그'],
-    tab:       ['탭'],
-    chip:      ['칩'],
-    banner:    ['배너'],
-    segmented: ['세그먼트'],
-    sheet:     ['시트','바텀시트'],
-    list:      ['목록','리스트'],
-    card:      ['카드'],
-    image:     ['이미지','사진'],
-    link:      ['링크'],
-    switch:    ['스위치','토글'],
-    checkbox:  ['체크박스'],
-    radio:     ['라디오']
-  },
-  element: {
-    search:       ['검색'],
-    notification: ['알림','노티'],
-    password:     ['비밀번호','패스워드'],
-    title:        ['제목','타이틀'],
-    description:  ['설명','내용'],
-    cta:          ['다음','시작','완료','제출','계속'],
-    save:         ['저장'],
-    cancel:       ['취소'],
-    confirm:      ['확인'],
-    delete:       ['삭제'],
-    close:        ['닫기'],
-    back:         ['이전','뒤로']
-  },
-  state: {
-    error:       ['오류','실패','에러','잘못'],
-    empty:       ['없어요','없습니다','비어','empty'],
-    loading:     ['로딩','불러오는','처리 중'],
-    success:     ['성공','완료됐','됐어요'],
-    disabled:    ['비활성','불가'],
-    placeholder: ['입력해주세요','검색어를','placeholder'],
-    hint:        ['힌트','도움말'],
-    pressed:     ['눌림','pressed'],
-    focused:     ['포커스','focused'],
-    selected:    ['선택됨','selected']
+// ── 카드 선택 ─────────────────────────────────────────────────────────────────
+function selE(el, key, val) {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selKey = key; selVal = val;
+  selTags = [...(cardTags[el.id] || [])];
+  if (IS_FIGMA && currentTopFrameNames.length) {
+    currentTopFrameNames.forEach(n => { if (/^\d+\.\d+\.\d+$/.test(n) && !selTags.includes(n)) selTags.push(n); });
+    selTags.sort();
   }
-};
-let screenList = ['common','onboarding','home','profile','settings','payment','search'];
-let tolgeeConfig = {url:'https://app.tolgee.io',projectId:'',apiKey:'',langs:[]};
-let selectedFrames = [];
-let layerContext = null; // Figma에서 선택한 텍스트 레이어 맥락
-let currentTextNodeId = null; // 현재 선택된 텍스트 레이어 ID (레이어 이름 변경용)
-let currentTopFrameNames = []; // 선택된 객체들의 최상위 프레임 이름 목록 (Figma 화면 태그용)
-let currentTopFrameId = null;  // 스크린샷용 최상위 프레임 ID
-let bulkTexts = [];     // 프레임 선택 시 수집된 텍스트 목록
-let bulkMode = false;   // 일괄 모드 여부
-let cardTags = {};
-let selKey=null,selVal=null,selTags=[],selExistingKeyId=null;
-let _api=null,_cache=null,_cacheTime=0;
-const CACHE_TTL=5*60*1000;
+  selExistingKeyId = el.dataset.keyId ? parseInt(el.dataset.keyId) : null;
+  showConfirm(key, val);
+}
+function selN(el, inputVal) {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const keyVal = document.getElementById('nki')?.value || '';
+  selKey = keyVal; selVal = inputVal; selTags = [];
+  if (IS_FIGMA && currentTopFrameNames.length) {
+    currentTopFrameNames.forEach(n => { if (/^\d+\.\d+\.\d+$/.test(n) && !selTags.includes(n)) selTags.push(n); });
+    selTags.sort();
+  }
+  selExistingKeyId = null;
+  showConfirm(keyVal, inputVal);
+}
+function showConfirm(key, val) {
+  const ck = document.getElementById('c-key'); if (ck) ck.textContent = key;
+  const cv = document.getElementById('c-val'); if (cv) cv.textContent = val;
+  uCT();
+  document.getElementById('confirm-box')?.classList.add('visible');
+}
 
-const MOCK_DB=[
-  {key:'common.btn.confirm',val:'확인',usage:12,figmaTags:['1.1.3','2.1.1','3.1.2'],keyId:''},
-  {key:'common.btn.cancel',val:'취소',usage:9,figmaTags:['1.1.3','3.2.2'],keyId:''},
-  {key:'common.btn.save',val:'저장',usage:7,figmaTags:['4.1.2','4.2.1'],keyId:''},
-  {key:'common.btn.cta',val:'다음으로',usage:3,figmaTags:['3.1.1','3.1.2','3.2.1'],keyId:''},
-  {key:'common.btn.continue',val:'계속하기',usage:2,figmaTags:['1.1.2','3.1.3'],keyId:''},
-  {key:'common.error.generic',val:'오류가 발생했습니다',usage:6,figmaTags:['1.2.1'],keyId:''},
-  {key:'onboarding.name_input.btn.next',val:'다음',usage:1,figmaTags:['3.1.1'],keyId:''},
-  {key:'onboarding.name_input.input.placeholder',val:'이름을 입력해주세요',usage:1,figmaTags:['3.1.1'],keyId:''},
-  {key:'profile.name_edit.btn.save',val:'저장하기',usage:1,figmaTags:['4.1.2'],keyId:''},
-];
+// ── 키 복사 ───────────────────────────────────────────────────────────────────
+function cpKey() {
+  if (!selKey) return;
+  navigator.clipboard?.writeText(selKey).then(() => showToast('키 복사됨')).catch(() => showToast(selKey));
+}
 
-// ── Figma 브릿지 메시지 수신 ──────────────────────────────────────────────────
-// ui.html이 iframe에 { source:'figma-bridge', payload } 형태로 전달
-window.addEventListener('message', (event) => {
-  if (event.data?.source !== 'figma-bridge') return;
-  handleFigmaMsg(event.data.payload);
-});
+// ── 레이어 이름 변경 ──────────────────────────────────────────────────────────
+function shouldRenameLayer() {
+  const chk = document.getElementById('rename-layer-chk');
+  return IS_FIGMA && chk && chk.checked;
+}
+
+// ── 스크린샷 ──────────────────────────────────────────────────────────────────
+function handleScreenshotReady(msg) {
+  console.log('[SKT] screenshot-ready, base64 len:', msg.base64?.length);
+  window._screenshotCallbacks = window._screenshotCallbacks || {};
+  const keys = Object.keys(window._screenshotCallbacks).sort();
+  if (keys.length > 0) {
+    const cb = window._screenshotCallbacks[keys[0]];
+    delete window._screenshotCallbacks[keys[0]];
+    if (cb) cb(msg);
+  } else if (window._screenshotCallback) {
+    window._screenshotCallback(msg); window._screenshotCallback = null;
+  }
+}
+
+async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFrameName, textNodeId) {
+  const frameId = overrideFrameId || (selectedFrames.length ? selectedFrames[0].id : null);
+  const frameName = overrideFrameName || (selectedFrames.length ? selectedFrames[0].name : keyName);
+  if (!frameId) { console.warn('[SKT] 스크린샷: frameId 없음'); return; }
+  let cached = (_cache||[]).find(item => item.key === keyName);
+  if (!cached?.keyId) {
+    try { _cache = await api.fetchAllKeys(); _cacheTime = Date.now(); cached = _cache.find(item => item.key === keyName); } catch(e) {}
+  }
+  if (!cached?.keyId) { console.warn('[SKT] 스크린샷: keyId 없음', keyName); return; }
+  const keyId = cached.keyId;
+  const callbackId = 'ss_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  return new Promise(resolve => {
+    toFigma({ type:'export-screenshot', frameId, textNodeId: textNodeId||null });
+    window._screenshotCallbacks = window._screenshotCallbacks || {};
+    window._screenshotCallbacks[callbackId] = async function(msg) {
+      delete window._screenshotCallbacks[callbackId];
+      try {
+        const binary = atob(msg.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+        const blob = new Blob([bytes], {type:'image/png'});
+        const pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+        const fd = new FormData();
+        fd.append('screenshot', blob, (frameName||'screenshot')+'.png');
+        if (pos) fd.append('positions', JSON.stringify([{x:pos.x,y:pos.y,width:pos.width,height:pos.height}]));
+        const res = await fetch(`${api.baseUrl}/v2/projects/${api.projectId}/keys/${keyId}/screenshots`,
+          {method:'POST', credentials:'omit', headers:{'X-API-Key':api.apiKey}, body:fd});
+        console.log('[SKT] screenshot status:', res.status, 'key:', keyName);
+        if (!res.ok) throw new Error('스크린샷 실패: '+res.status);
+        showToast('✓ 스크린샷 첨부');
+      } catch(e) { console.warn('[SKT]', e.message); showToast('스크린샷 실패: '+e.message); }
+      finally { resolve(); }
+    };
+    setTimeout(() => {
+      if (window._screenshotCallbacks?.[callbackId]) {
+        delete window._screenshotCallbacks[callbackId]; resolve();
+      }
+    }, 10000);
+  });
+}
+
+async function uploadScreenshotsForAllFrames(api, keyName, frames, textNodeId) {
+  for (const frame of frames) await uploadScreenshotForKey(api, keyName, frame.id, frame.name, textNodeId);
+}
+
+// ── Figma 메시지 수신 ─────────────────────────────────────────────────────────
+function applySelection(msg) {
+  const frames = msg.frames || [], texts = msg.texts || [];
+  selectedFrames = frames;
+  const hasSel = texts.length > 0;
+  const hint = document.getElementById('hint-box');
+  if (hasSel) {
+    layerContext = texts[0].context || null;
+    currentTextNodeId = texts[0].id || null;
+    currentTopFrameNames = msg.topFrameNames || (texts[0].topFrameName ? [texts[0].topFrameName] : []);
+    currentTopFrameId = texts[0].topFrameId || null;
+    const hintBox = document.getElementById('hint-box');
+    if (hintBox) {
+      hintBox.dataset.nodeId = texts[0].id || '';
+      hintBox.dataset.topFrameId = texts[0].topFrameId || '';
+      hintBox.dataset.topFrameName = texts[0].topFrameName || '';
+      hintBox.dataset.layerContext = texts[0].context ? JSON.stringify(texts[0].context) : '';
+    }
+    const hintText = document.getElementById('hint-text');
+    const hintFrame = document.getElementById('hint-frame');
+    if (hintText) hintText.textContent = texts[0].characters || '';
+    if (hintFrame && currentTopFrameNames.length) hintFrame.textContent = '📱 ' + currentTopFrameNames.join(', ');
+    if (hint) hint.style.display = 'block';
+    const inp = document.getElementById('str-input');
+    if (inp && !inp.value) inp.value = texts[0].characters || '';
+  } else {
+    if (hint) hint.style.display = 'none';
+    layerContext = null; currentTextNodeId = null;
+    currentTopFrameNames = msg.topFrameNames || [];
+    currentTopFrameId = null;
+  }
+  // 일괄 모드
+  const hasBulk = (msg.bulkTexts||[]).length > 0;
+  document.getElementById('replace-no-sel').style.display = frames.length ? 'none' : 'block';
+  document.getElementById('replace-content').style.display = frames.length ? 'block' : 'none';
+  document.getElementById('no-sel').style.display = frames.length ? 'none' : 'block';
+  document.getElementById('rename-content').style.display = frames.length ? 'block' : 'none';
+  const bulkBadge = document.getElementById('bulk-badge');
+  if (bulkBadge) { bulkBadge.textContent = hasBulk ? (msg.bulkTexts||[]).length : 0; bulkBadge.style.display = hasBulk ? 'inline' : 'none'; }
+  if (bulkMode && hasBulk) { bulkTexts = msg.bulkTexts || []; renderBulkList(); }
+  // 프레임 이름 탭
+  renderRenamePreview(frames);
+}
 
 function handleFigmaMsg(msg) {
-  if (!msg) return;
-  switch(msg.type) {
+  switch (msg.type) {
     case 'init':
+      if (msg.savedKeys) {
+        const sk = msg.savedKeys;
+        try {
+          if (sk.claudeKey) localStorage.setItem('skt_claude_key', sk.claudeKey);
+          if (sk.tolgeeApiKey) localStorage.setItem('skt_tolgee_apikey', sk.tolgeeApiKey);
+          if (sk.ghToken) localStorage.setItem('skt_gh_token', sk.ghToken);
+          if (sk.ghOwner) localStorage.setItem('skt_gh_owner', sk.ghOwner);
+          if (sk.ghRepo) localStorage.setItem('skt_gh_repo', sk.ghRepo);
+          if (sk.ghBranch) localStorage.setItem('skt_gh_branch', sk.ghBranch);
+          if (sk.theme) localStorage.setItem('skt_theme', sk.theme);
+        } catch(e) {}
+        setTimeout(() => {
+          const claudeInput = document.getElementById('claude-key');
+          const tolgeeInput = document.getElementById('cfg-key');
+          const ghInput = document.getElementById('gh-token');
+          if (claudeInput && sk.claudeKey) claudeInput.value = sk.claudeKey;
+          if (tolgeeInput && sk.tolgeeApiKey) tolgeeInput.value = sk.tolgeeApiKey;
+          if (ghInput && sk.ghToken) ghInput.value = sk.ghToken;
+          if (sk.theme) setTheme(sk.theme);
+          showOnboardingIfNeeded();
+        }, 200);
+      }
       if (msg.featureMap) featureMap = msg.featureMap;
       if (msg.screenList) screenList = msg.screenList;
-      // Figma 환경에서도 config.json에서 url/projectId 불러오기
-      fetchRemoteConfig().then(remote => {
-        if (remote) {
-          if (remote.featureMap) featureMap = remote.featureMap;
-          if (remote.screenList) screenList = remote.screenList;
-          if (remote.keyRules)   keyRules   = remote.keyRules;
-          if (remote.tolgee) {
-            if (remote.tolgee.url)       tolgeeConfig.url       = remote.tolgee.url;
-            if (remote.tolgee.projectId) tolgeeConfig.projectId = remote.tolgee.projectId;
-            if (remote.tolgee.langs)     tolgeeConfig.langs     = remote.tolgee.langs;
-          }
-          if (remote.github) {
-            if (remote.github.owner)  localStorage.setItem('skt_gh_owner',  remote.github.owner);
-            if (remote.github.repo)   localStorage.setItem('skt_gh_repo',   remote.github.repo);
-            if (remote.github.branch) localStorage.setItem('skt_gh_branch', remote.github.branch);
-          }
-          renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
-        }
-        // API Key는 clientStorage에서 (Figma) 또는 localStorage에서 (브라우저)
-        const savedKey = msg.tolgeeConfig?.apiKey || localStorage.getItem('skt_tolgee_apikey') || (msg.savedKeys && msg.savedKeys.tolgeeApiKey) || '';
+      if (msg.tolgeeConfig) {
+        tolgeeConfig = msg.tolgeeConfig;
+        const savedKey = tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
         tolgeeConfig.apiKey = savedKey;
-        document.getElementById('cfg-url').value     = tolgeeConfig.url || '';
+        document.getElementById('cfg-url').value = tolgeeConfig.url || '';
         document.getElementById('cfg-project').value = tolgeeConfig.projectId || '';
-        document.getElementById('cfg-key').value     = savedKey;
-        if (savedKey) _api = null;
-      });
-      renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+      }
       applySelection(msg);
+      renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+      setTimeout(warmupCache, 1500);
       break;
     case 'selection-changed':
       applySelection(msg);
-      break;
-    case 'saved':
-      if (msg.key === 'featureMap') { showBadge('screen-saved'); showBadge('feat-saved'); }
-      if (msg.key === 'tolgeeConfig') showBadge('tolgee-saved');
-      if (msg.key === 'storage') { /* 범용 저장 완료 */ }
-      break;
-    case 'replace-done':
-      document.getElementById('replace-btn').textContent = msg.replaced + '개 교체 완료';
-      document.getElementById('replace-btn').disabled = false;
-      showToast('✓ ' + msg.replaced + '개 텍스트 교체됐어요');
-      break;
-    case 'rename-done':
-      document.getElementById('rename-list').innerHTML =
-        msg.renamed.map(r=>`<div class="frame-item"><span class="frame-num">✓</span><span class="frame-new">${r.newName}</span></div>`).join('');
-      document.getElementById('rename-result').style.display='block';
-      showToast(`${msg.renamed.length}개 프레임 이름 변경 완료`);
       break;
     case 'screenshot-ready':
       handleScreenshotReady(msg);
@@ -677,469 +1000,444 @@ function handleFigmaMsg(msg) {
     case 'layer-renamed':
       showToast('레이어명 → ' + msg.keyName);
       break;
+    case 'storage-loaded':
+      if (msg.key && msg.value !== undefined) {
+        try { localStorage.setItem(msg.key.startsWith('skt_') ? msg.key : 'skt_'+msg.key, msg.value); } catch(e) {}
+      }
+      break;
     case 'error':
-      showToast(msg.message);
+      showToast('오류: ' + msg.message);
       break;
   }
 }
 
-// Figma로 메시지 보내기 (부모 ui.html 경유)
-function toFigma(payload) {
-  window.parent.postMessage({ source: 'app-to-figma', payload }, '*');
-}
+window.addEventListener('message', function(event) {
+  const data = event.data;
+  if (data?.source === 'figma-bridge' && data.payload) handleFigmaMsg(data.payload);
+});
 
-// ── 선택 상태 반영 ────────────────────────────────────────────────────────────
-function applySelection(msg) {
-  // 프레임 목록 (rename 탭)
-  selectedFrames = (msg.frames||[]).slice().sort((a,b)=>a.x-b.x);
-  const hasSel = selectedFrames.length > 0;
-  document.getElementById('no-sel').style.display = hasSel ? 'none' : 'block';
-  document.getElementById('rename-content').style.display = hasSel ? 'block' : 'none';
-  if (hasSel) renderPreview();
-  // 언어 교체 탭 프레임 감지
-  document.getElementById('replace-no-sel').style.display = hasSel ? 'none' : 'block';
-  document.getElementById('replace-content').style.display = hasSel ? 'block' : 'none';
-  document.getElementById('replace-preview').innerHTML = '';
-  document.getElementById('replace-btn').style.display = 'none';
-
-
-  // 텍스트 노드 힌트 (문자열 키 탭)
-  const texts = msg.texts || [];
-  const hint = document.getElementById('hint-box');
-  if (texts.length === 1) {
-    document.getElementById('str-input').value = texts[0].characters;
-    document.getElementById('hint-text').textContent = '"' + texts[0].characters + '"';
-    const fn = texts[0].frameName;
-    document.getElementById('hint-frame').textContent = fn ? '📱 프레임: ' + fn : '';
-    hint.style.display = 'block';
-    // 맥락 저장 (Claude 추천에 활용)
-    layerContext = texts[0].context || null;
-    currentTextNodeId = texts[0].id || null;
-    currentTopFrameNames = msg.topFrameNames || (texts[0].topFrameName ? [texts[0].topFrameName] : []);
-    currentTopFrameId = texts[0].topFrameId || null;
-    // hint-box에 값 고정 저장 — 검색 후 선택 해제돼도 유지
-    var hintBox = document.getElementById('hint-box');
-    hintBox.dataset.nodeId = texts[0].id || '';
-    hintBox.dataset.topFrameId = texts[0].topFrameId || '';
-    hintBox.dataset.topFrameName = texts[0].topFrameName || '';
-    hintBox.dataset.layerContext = texts[0].context ? JSON.stringify(texts[0].context) : '';
-    // 프레임 이름 힌트 표시
-    if (currentTopFrameNames.length > 0) {
-      document.getElementById('hint-frame').textContent = '📱 ' + currentTopFrameNames.join(', ');
-    }
-  } else {
-    hint.style.display = 'none';
-    layerContext = null;
-    currentTextNodeId = null;
-    currentTopFrameNames = msg.topFrameNames || [];
-    currentTopFrameId = null;
-  }
-
-  // 일괄 모드: 프레임 선택 시 자동으로 bulk 텍스트 업데이트
-  bulkTexts = msg.bulkTexts || [];
-  document.getElementById('bulk-count').textContent = bulkTexts.length;
-  var badge = document.getElementById('bulk-badge');
-  if (badge) {
-    badge.textContent = bulkTexts.length;
-    badge.style.display = bulkTexts.length > 0 ? 'inline' : 'none';
-  }
-  if (bulkTexts.length > 0 && bulkMode) {
-    renderBulkList();
-  }
-  // 프레임 일괄 모드에서 자동 갱신
-  if (bulkTexts.length > 0 && bulkMode) {
-    renderBulkList();
-  }
-}
-
-// ── 탭 ───────────────────────────────────────────────────────────────────────
-// ── 모드 전환 ────────────────────────────────────────────────────────────────
+// ── 모드 전환 ─────────────────────────────────────────────────────────────────
 function setMode(mode) {
   bulkMode = mode === 'bulk';
   document.getElementById('single-area').style.display = bulkMode ? 'none' : 'block';
   document.getElementById('bulk-area').style.display   = bulkMode ? 'block' : 'none';
-  var btnSingle = document.getElementById('mode-single');
-  var btnBulk = document.getElementById('mode-bulk');
-  btnSingle.style.background = bulkMode ? 'transparent' : 'var(--btn-bg)';
-  btnSingle.style.color = bulkMode ? 'var(--text-3)' : 'var(--on-btn)';
-  btnBulk.style.background = bulkMode ? 'var(--btn-bg)' : 'transparent';
-  btnBulk.style.color = bulkMode ? 'var(--on-btn)' : 'var(--text-3)';
-  if (bulkMode) renderBulkList();
+  const btnS = document.getElementById('mode-single');
+  const btnB = document.getElementById('mode-bulk');
+  if (btnS) { btnS.style.background = bulkMode?'transparent':'var(--btn-bg)'; btnS.style.color = bulkMode?'var(--text-3)':'var(--on-btn)'; }
+  if (btnB) { btnB.style.background = bulkMode?'var(--btn-bg)':'transparent'; btnB.style.color = bulkMode?'var(--on-btn)':'var(--text-3)'; }
+  if (bulkMode) { bulkTexts = []; renderBulkList(); }
 }
 
-// ── 일괄 목록 렌더 ────────────────────────────────────────────────────────────
-async function renderBulkList() {
-  var list = document.getElementById('bulk-list');
-  if (!bulkTexts.length) {
-    list.innerHTML = '<div class="empty">Figma에서 프레임을 선택해주세요.</div>';
-    return;
+// ── 검색 ──────────────────────────────────────────────────────────────────────
+async function doSearch() {
+  const val = document.getElementById('str-input').value.trim();
+  if (!val) { showToast('문자열을 입력해주세요'); return; }
+  const hintBox = document.getElementById('hint-box');
+  if (hintBox) {
+    if (hintBox.dataset.topFrameId) currentTopFrameId = hintBox.dataset.topFrameId;
+    if (hintBox.dataset.topFrameName && !currentTopFrameNames.length) currentTopFrameNames = [hintBox.dataset.topFrameName];
+    if (hintBox.dataset.layerContext && !layerContext) try { layerContext = JSON.parse(hintBox.dataset.layerContext); } catch(e) {}
   }
-  // 로딩 표시
-  list.innerHTML = '<div class="empty"><span class="ld"><span></span><span></span><span></span></span> 키 추천 중...</div>';
+  const btn = document.getElementById('search-btn');
+  if (btn) { btn.innerHTML='<span class="ld"><span></span><span></span><span></span></span>'; btn.disabled=true; }
+  selKey=null; selVal=null; selTags=[]; selExistingKeyId=null;
+  document.getElementById('confirm-box')?.classList.remove('visible');
+  const thresh = getThresh();
+  try {
+    let db;
+    const a = getApi();
+    console.log('[SKT] doSearch, api:', !!a, 'cache:', !!_cache);
+    if (a) {
+      try {
+        const t0 = Date.now();
+        db = await getCached();
+        console.log('[SKT] getCached in', Date.now()-t0, 'ms, keys:', db?.length);
+        if (!db?.length) db = MOCK_DB;
+      } catch(e) { db = MOCK_DB; }
+    } else db = MOCK_DB;
+    const res = db.map(item => ({...item, sim:sim(val, item.val)})).filter(i => i.sim >= thresh.sim).sort((a,b) => b.sim-a.sim).slice(0,8);
+    await renderResults(val, res, thresh, db);
+  } finally {
+    if (btn) { btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 유사 문자열 검색'; btn.disabled=false; }
+  }
+}
 
-  var existingKeys = [];
-  try { existingKeys = (await getCached()) || MOCK_DB; } catch(e) { existingKeys = MOCK_DB; }
+async function renderResults(inputVal, results, thresh, allKeys) {
+  console.log('[SKT] renderResults, results:', results.length, 'allKeys:', allKeys?.length);
+  const scr = document.getElementById('screen-sel').value;
+  const area = document.getElementById('key-results'); if (!area) return;
+  cardTags = {};
+  let html = '';
+  if (!results.length) html = '<div class="empty">유사한 문자열이 없어요.<br>신규 키로 등록해보세요.</div>';
+  results.forEach((item, i) => {
+    const isR = item.sim >= thresh.reuse;
+    const bCls = isR?'br':'bs', bLbl = isR?`재사용·${item.sim}%`:`유사·${item.sim}%`;
+    const cId = `ce-${i}`; cardTags[cId] = [...(item.figmaTags||[])];
+    html += `<div class="card" id="${cId}" data-key-id="${item.keyId||''}" onclick="selE(this,'${item.key}','${item.val.replace(/'/g,"\\'")}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:500;color:var(--text)">${item.key}</span>
+        <span class="badge ${bCls}">${bLbl}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-2)">${item.val}</div>
+    </div>`;
+  });
+  area.innerHTML = html;
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', function() { selN(this, inputVal); });
+  });
+  const existingKeys = allKeys || MOCK_DB;
+  const ruleCands = genKeyCandidates(scr, inputVal, layerContext);
+  const ruleResults = withDupeCheck(ruleCands, existingKeys);
+  console.log('[SKT] ruleCands:', ruleCands);
+  const loadingEl = document.getElementById('claude-loading');
+  const suggestEl = document.getElementById('claude-suggestions');
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (suggestEl) {
+    suggestEl.style.display = 'block';
+    renderSuggestions(suggestEl, ruleResults, inputVal);
+    const k0 = ruleResults[0]?.key;
+    if (k0) { const nki = document.getElementById('nki'); if (nki) nki.value=k0; selKey=k0; }
+  }
+  let claudeKey = ''; try { claudeKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
+  if (claudeKey) {
+    recommendKeysWithClaude(scr, inputVal, existingKeys).then(suggestions => {
+      if (!suggestEl) return;
+      renderSuggestions(suggestEl, suggestions, inputVal);
+      const k = suggestions[0]?.key;
+      if (k) { const nki = document.getElementById('nki'); if (nki) nki.value=k; selKey=k; }
+    }).catch(() => {});
+  }
+}
 
-  var html = '';
-  var scr = document.getElementById('screen-sel').value;
+function renderSuggestions(el, suggestions, inputVal) {
+  el.innerHTML = suggestions.map((s, i) => {
+    const key = typeof s === 'object' ? s.key : s;
+    return `<div class="card" id="cn-${i}" onclick="selN(this,'${inputVal.replace(/'/g,"\\'")}'); document.getElementById('nki').value='${key}'; selKey='${key}';" style="margin-bottom:6px">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--text)">${key}</span>
+    </div>`;
+  }).join('');
+}
 
-  // 각 문자열에 대해 키 추천
-  var items = [];
-  var usedKeys = {}; // 이미 추천된 키 추적 (중복 방지)
-  for (var i = 0; i < bulkTexts.length; i++) {
-    var t = bulkTexts[i];
+// ── 등록 ──────────────────────────────────────────────────────────────────────
+async function regKey() {
+  const keyToRegister = selKey || document.getElementById('nki')?.value?.trim();
+  const valToRegister = selVal || document.getElementById('str-input')?.value?.trim();
+  if (!keyToRegister || !valToRegister) { showToast('키와 문자열을 입력해주세요'); return; }
+  const tagsToRegister = [...selTags];
+  const existingId = selExistingKeyId;
+  const a = getApi();
+  if (!a) { showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요'); return; }
+  try {
+    const langs = tolgeeConfig.langs?.length ? tolgeeConfig.langs : ['ko-KR'];
+    const baseLang = langs[0];
+    const targetLangs = langs.slice(1);
+    const translations = { [baseLang]: valToRegister };
+    let claudeKey = ''; try { claudeKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
+    if (claudeKey && targetLangs.length) {
+      showToast('번역 중...');
+      const translated = await translateWithClaude(valToRegister, baseLang, targetLangs);
+      targetLangs.forEach(l => translations[l] = translated[l] || '');
+    } else targetLangs.forEach(l => translations[l] = '');
+    await a.registerKey({ keyName:keyToRegister, val:valToRegister, translations, figmaTags:tagsToRegister, existingKeyId:existingId });
+    try { _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) { _cache = null; }
+    showToast('✓ "' + keyToRegister + '" 등록됐어요');
+    if (shouldRenameLayer() && currentTextNodeId) toFigma({ type:'rename-layer', nodeId:currentTextNodeId, keyName:keyToRegister });
+    const screenshotChk = document.getElementById('screenshot-chk');
+    if (IS_FIGMA && screenshotChk?.checked) {
+      const hintDs = document.getElementById('hint-box')?.dataset || {};
+      const ssFrameId = selectedFrames.length ? selectedFrames[0].id : currentTopFrameId || hintDs.topFrameId;
+      const ssFrameName = selectedFrames.length ? selectedFrames[0].name : (currentTopFrameNames[0] || hintDs.topFrameName || keyToRegister);
+      const ssTextNodeId = currentTextNodeId || hintDs.nodeId;
+      if (ssFrameId) await uploadScreenshotsForAllFrames(a, keyToRegister, selectedFrames.length ? selectedFrames : [{id:ssFrameId,name:ssFrameName}], ssTextNodeId);
+    }
+    toFigma({ type:'notify', message:'키 등록: ' + keyToRegister });
+  } catch(e) { showToast('오류: ' + e.message); }
+}
+
+// ── 화면 내 문구 일괄 등록 ────────────────────────────────────────────────────
+async function renderBulkList() {
+  const list = document.getElementById('bulk-list'); if (!list) return;
+  const noSel = document.getElementById('bulk-no-sel');
+  if (!bulkTexts.length) {
+    if (noSel) noSel.style.display = 'block'; list.innerHTML = ''; return;
+  }
+  if (noSel) noSel.style.display = 'none';
+  const scr = document.getElementById('screen-sel').value;
+  list.innerHTML = '<div class="empty">키 추천 중...</div>';
+  let existingKeys = MOCK_DB;
+  const a = getApi();
+  if (a) try { existingKeys = (await getCached()) || MOCK_DB; } catch(e) {}
+  const items = [];
+  const usedKeys = {};
+  for (let i = 0; i < bulkTexts.length; i++) {
+    const t = bulkTexts[i];
     if (!t) { items.push(null); continue; }
-
-    // layerContext를 로컬 변수로 캡처 — 비동기 중 덮어쓰기 방지
-    var localContext = t.context || null;
+    const localContext = t.context || null;
     layerContext = localContext;
-
-    var candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
-
-    // 후보 키 중 아직 사용되지 않은 것 선택
-    var suggestedKey = null;
-    for (var ci = 0; ci < candidates.length; ci++) {
-      var cand = typeof candidates[ci] === 'object' ? candidates[ci].key : candidates[ci];
-      if (cand && !usedKeys[cand]) {
-        suggestedKey = cand;
-        break;
-      }
+    const candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
+    let suggestedKey = null;
+    for (const cand of candidates) {
+      const k = typeof cand === 'object' ? cand.key : cand;
+      if (k && !usedKeys[k]) { suggestedKey = k; break; }
     }
-
-    // 모든 후보가 중복이면 첫 번째 후보에 인덱스 suffix 추가
     if (!suggestedKey) {
-      var base = candidates[0] ? (typeof candidates[0] === 'object' ? candidates[0].key : candidates[0]) : genKey(scr, t.characters, localContext);
-      suggestedKey = base + '_' + (i + 1);
+      const base = candidates[0] ? (typeof candidates[0]==='object'?candidates[0].key:candidates[0]) : genKey(scr, t.characters, localContext);
+      suggestedKey = base + '_' + (i+1);
     }
-
     usedKeys[suggestedKey] = true;
     layerContext = null;
-    items.push({ text: t.characters, key: suggestedKey, idx: i });
+    items.push({ text:t.characters, key:suggestedKey, idx:i });
   }
-  layerContext = null;
-
   list.innerHTML = '';
-  items.forEach(function(item) {
+  items.forEach(item => {
     if (!item) return;
-
-    var existingMatch = existingKeys.find(function(k) {
-      return k.val && k.val.trim() === item.text.trim();
-    });
-
-    var div = document.createElement('div');
-    div.className = 'bulk-item' + (existingMatch ? ' bulk-item-exists' : '');
+    const existingMatch = existingKeys.find(k => k.val?.trim() === item.text.trim());
+    const div = document.createElement('div');
+    div.className = 'bulk-item' + (existingMatch?' bulk-item-exists':'');
     div.id = 'bulk-item-' + item.idx;
-
-    var existingBadge = existingMatch
-      ? '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;background:var(--amber-bg);border-radius:6px">'
-        + '<span style="font-size:10px;color:var(--amber)">이미 등록됨</span>'
-        + '<span style="font-family:var(--mono);font-size:10px;color:var(--amber);font-weight:500">' + existingMatch.key + '</span>'
-        + '</div>'
-      : '';
-
-    var keyVal = existingMatch ? existingMatch.key : item.key;
-    var regBtnLabel = existingMatch ? '재사용' : '등록';
-    var regBtnStyle = existingMatch ? 'background:var(--btn-s-bg);color:var(--text-2)' : '';
-
-    div.innerHTML = [
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
-        '<div class="val" style="margin:0">' + item.text + '</div>',
-        '<button onclick="excludeBulkItem(' + item.idx + ')" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1" title="제외">×</button>',
-      '</div>',
-      existingBadge,
-      '<div class="key-row">',
-        '<input class="key-edit" id="bulk-key-' + item.idx + '" value="' + keyVal + '">',
-        '<button class="reg-btn" onclick="registerBulkItem(' + item.idx + ')" style="' + regBtnStyle + '">' + regBtnLabel + '</button>',
-        '<span class="done-mark" id="bulk-done-' + item.idx + '" style="display:none">✓</span>',
-      '</div>',
-    ].join('');
+    const badge = existingMatch ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 8px;background:var(--amber-bg);border-radius:6px"><span style="font-size:10px;color:var(--amber)">이미 등록됨</span><span style="font-family:var(--mono);font-size:10px;color:var(--amber)">${existingMatch.key}</span></div>` : '';
+    const keyVal = existingMatch ? existingMatch.key : item.key;
+    const btnLabel = existingMatch ? '재사용' : '등록';
+    const btnStyle = existingMatch ? 'background:var(--btn-s-bg);color:var(--text-2)' : '';
+    div.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div class="val" style="margin:0">${item.text}</div><button onclick="excludeBulkItem(${item.idx})" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:14px;padding:0 2px">×</button></div>${badge}<div class="key-row"><input class="key-edit" id="bulk-key-${item.idx}" value="${keyVal}"><button class="reg-btn" onclick="registerBulkItem(${item.idx})" style="${btnStyle}">${btnLabel}</button><span class="done-mark" id="bulk-done-${item.idx}" style="display:none">✓</span></div>`;
     list.appendChild(div);
   });
 }
 
-// ── 개별 등록 ─────────────────────────────────────────────────────────────────
 function excludeBulkItem(idx) {
-  var itemEl = document.getElementById('bulk-item-' + idx);
-  if (itemEl) {
-    itemEl.style.transition = 'opacity .2s';
-    itemEl.style.opacity = '0';
-    setTimeout(function() { itemEl.remove(); }, 200);
-  }
-  // bulkTexts에서도 제거 (전체 등록 시 제외)
+  const el = document.getElementById('bulk-item-'+idx);
+  if (el) { el.style.transition='opacity .2s'; el.style.opacity='0'; setTimeout(()=>el.remove(),200); }
   bulkTexts[idx] = null;
 }
 
 async function registerBulkItem(idx) {
-  var keyEl = document.getElementById('bulk-key-' + idx);
-  var itemEl = document.getElementById('bulk-item-' + idx);
-  var doneEl = document.getElementById('bulk-done-' + idx);
-  var btnEl = itemEl.querySelector('.reg-btn');
-  if (!keyEl || !keyEl.value.trim()) { showToast('키를 입력해주세요'); return; }
-
-  var keyName = keyEl.value.trim();
-  var textItem = bulkTexts[idx];
-
-  btnEl.disabled = true;
-  btnEl.textContent = '...';
-  var api = getApi();
+  const keyEl = document.getElementById('bulk-key-'+idx);
+  const itemEl = document.getElementById('bulk-item-'+idx);
+  const doneEl = document.getElementById('bulk-done-'+idx);
+  const btnEl = itemEl?.querySelector('.reg-btn');
+  if (!keyEl?.value?.trim()) { showToast('키를 입력해주세요'); return; }
+  const keyName = keyEl.value.trim();
+  const textItem = bulkTexts[idx];
+  if (btnEl) { btnEl.disabled=true; btnEl.textContent='...'; }
+  const a = getApi();
   try {
-    if (api) {
-      // 다국어 자동 번역 (Claude API Key 있을 때)
-      var bLangs = tolgeeConfig.langs && tolgeeConfig.langs.length ? tolgeeConfig.langs : ['ko-KR'];
-      var bBaseLang = bLangs[0];
-      var bTargetLangs = bLangs.slice(1);
-      var bTranslations = {};
-      bTranslations[bBaseLang] = textItem.characters;
-      var bClaudeKey = '';
-      try { bClaudeKey = localStorage.getItem('skt_claude_key') || ''; } catch(e) {}
-      if (bClaudeKey && bTargetLangs.length > 0) {
-        var bTranslated = await translateWithClaude(textItem.characters, bBaseLang, bTargetLangs);
-        bTargetLangs.forEach(function(l) { bTranslations[l] = bTranslated[l] || ''; });
-      } else {
-        bTargetLangs.forEach(function(l) { bTranslations[l] = ''; });
-      }
-
-      // figmaTags — topFrameName이 있으면 Description에 추가
-      var bFigmaTags = [];
-      if (textItem.topFrameName && /^\d+\.\d+\.\d+$/.test(textItem.topFrameName)) {
-        bFigmaTags = [textItem.topFrameName];
-      }
-
-      var registerResult = await api.registerKey({ keyName: keyName, val: textItem.characters, translations: bTranslations, figmaTags: bFigmaTags, existingKeyId: null });
-      // 캐시 갱신 — 스크린샷 업로드 전에 keyId가 필요하므로 즉시 fetch
-      try { _cache = await api.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) { _cache = null; }
-
-      // 레이어 이름 변경 (IS_FIGMA + 체크박스)
-      var renameChk = document.getElementById('rename-layer-chk');
-      if (IS_FIGMA && textItem.id && renameChk && renameChk.checked) {
-        toFigma({ type: 'rename-layer', nodeId: textItem.id, keyName: keyName });
-      }
-
-      // 스크린샷 첨부 (IS_FIGMA + 체크박스 + 해당 텍스트의 최상위 프레임)
-      var screenshotChk = document.getElementById('screenshot-chk');
-      if (IS_FIGMA && screenshotChk && screenshotChk.checked && textItem.topFrameId) {
-        // 해당 텍스트 레이어의 정확한 위치를 전달
-        await uploadScreenshotForKey(api, keyName, textItem.topFrameId, textItem.topFrameName || keyName, textItem.id);
-      }
+    if (a) {
+      const langs = tolgeeConfig.langs?.length ? tolgeeConfig.langs : ['ko-KR'];
+      const baseLang = langs[0], targetLangs = langs.slice(1);
+      const bTranslations = { [baseLang]: textItem.characters };
+      let claudeKey = ''; try { claudeKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
+      if (claudeKey && targetLangs.length) {
+        const tr = await translateWithClaude(textItem.characters, baseLang, targetLangs);
+        targetLangs.forEach(l => bTranslations[l] = tr[l]||'');
+      } else targetLangs.forEach(l => bTranslations[l]='');
+      const bFigmaTags = textItem.topFrameName && /^\d+\.\d+\.\d+$/.test(textItem.topFrameName) ? [textItem.topFrameName] : [];
+      await a.registerKey({ keyName, val:textItem.characters, translations:bTranslations, figmaTags:bFigmaTags, existingKeyId:null });
+      try { _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) { _cache=null; }
+      const renameChk = document.getElementById('rename-layer-chk');
+      if (IS_FIGMA && textItem.id && renameChk?.checked) toFigma({ type:'rename-layer', nodeId:textItem.id, keyName });
+      const screenshotChk = document.getElementById('screenshot-chk');
+      if (IS_FIGMA && screenshotChk?.checked && textItem.topFrameId)
+        await uploadScreenshotForKey(a, keyName, textItem.topFrameId, textItem.topFrameName||keyName, textItem.id);
     }
-    itemEl.classList.add('done');
-    btnEl.style.display = 'none';
-    doneEl.style.display = 'inline';
-    showToast('✓ ' + keyName + ' 등록됨');
-  } catch(e) {
-    showToast('오류: ' + e.message);
-    btnEl.disabled = false;
-    btnEl.textContent = '등록';
-  }
+    if (itemEl) itemEl.classList.add('done');
+    if (btnEl) btnEl.style.display='none';
+    if (doneEl) doneEl.style.display='inline';
+    showToast('✓ ' + keyName);
+  } catch(e) { showToast('오류: '+e.message); if (btnEl) { btnEl.disabled=false; btnEl.textContent='등록'; } }
 }
 
-// ── 전체 등록 ─────────────────────────────────────────────────────────────────
 async function registerAll() {
-  var items = document.querySelectorAll('.bulk-item:not(.done)');
+  const items = document.querySelectorAll('.bulk-item:not(.done)');
   if (!items.length) { showToast('등록할 항목이 없어요'); return; }
-  for (var i = 0; i < bulkTexts.length; i++) {
-    if (!bulkTexts[i]) continue; // 제외된 항목 스킵
-    var itemEl = document.getElementById('bulk-item-' + i);
-    if (itemEl && !itemEl.classList.contains('done')) {
-      await registerBulkItem(i);
-      await new Promise(function(r) { setTimeout(r, 300); }); // 연속 요청 방지
-    }
+  for (let i = 0; i < bulkTexts.length; i++) {
+    if (!bulkTexts[i]) continue;
+    const el = document.getElementById('bulk-item-'+i);
+    if (el && !el.classList.contains('done')) { await registerBulkItem(i); await new Promise(r => setTimeout(r,200)); }
   }
 }
 
-// ── 키 재추천 ─────────────────────────────────────────────────────────────────
-async function refreshBulk() {
-  await renderBulkList();
+// ── 언어 교체 탭 ──────────────────────────────────────────────────────────────
+function renderReplaceLangSelect() {
+  const sel = document.getElementById('replace-lang-sel'); if (!sel) return;
+  const langs = tolgeeConfig.langs || ['ko-KR','en-US','ja-JP'];
+  sel.innerHTML = langs.map(l => `<option value="${l}">${l}</option>`).join('');
 }
 
-function sw(t) {
-  document.querySelectorAll('.tab').forEach(function(el) {
-    const tabs = ['keys','replace','rename','manage','settings'];
-    const idx = Array.from(document.querySelectorAll('.tab')).indexOf(el);
-    el.classList.toggle('active', tabs[idx] === t);
-  });
-  document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
-  document.getElementById('tab-'+t).classList.add('active');
+async function previewReplace() {
+  const lang = document.getElementById('replace-lang-sel')?.value;
+  if (!lang) return;
+  const a = getApi(); if (!a) { showToast('Tolgee 설정 필요'); return; }
+  const db = await getCached().catch(() => null);
+  if (!db) { showToast('키 목록 로드 실패'); return; }
+  const preview = document.getElementById('replace-preview');
+  const btn = document.getElementById('replace-btn');
+  if (!preview) return;
+  const texts = document.querySelectorAll('[data-is-text]');
+  preview.innerHTML = '<div class="empty">미리보기 준비 중...</div>';
+  const items = [];
+  for (const frame of selectedFrames) {
+    const frameTexts = (await getFrameTextsFromFigma(frame.id)).catch(()=>[]);
+    // items 수집은 selection-changed에서 이미 됨
+  }
+  preview.innerHTML = '<div class="empty">선택된 프레임의 텍스트를 교체 미리보기해요.</div>';
+  if (btn) btn.style.display = 'block';
 }
 
-// ── 화면 드롭다운 ─────────────────────────────────────────────────────────────
-function renderScreenSelect() {
-  const sel = document.getElementById('screen-sel');
-  const cur = sel.value;
-  sel.innerHTML = screenList.map(s=>`<option value="${s}">${s}</option>`).join('');
-  if (screenList.includes(cur)) sel.value = cur;
+function applyReplace() {
+  const lang = document.getElementById('replace-lang-sel')?.value;
+  if (!lang || !selectedFrames.length) { showToast('프레임과 언어를 선택해주세요'); return; }
+  toFigma({ type:'replace-lang', frameIds: selectedFrames.map(f=>f.id), lang });
 }
 
-// ── 설정: 화면 목록 ───────────────────────────────────────────────────────────
-function renderScreenList() {
-  document.getElementById('screen-list').innerHTML = screenList.map((s,i)=>
-    `<div class="screen-item"><span class="screen-val">${s}</span><button class="rm-btn" onclick="rmScreen(${i})">×</button></div>`
+// ── 프레임 이름 변경 탭 ───────────────────────────────────────────────────────
+function renderRenamePreview(frames) {
+  const area = document.getElementById('preview-area'); if (!area) return;
+  if (!frames.length) { area.innerHTML=''; return; }
+  const featNum = document.getElementById('feat-num')?.value||'';
+  const featVer = document.getElementById('feat-ver')?.value||'';
+  if (!featNum || !featVer) { area.innerHTML='<div class="empty">기능번호·버전을 입력해주세요</div>'; return; }
+  const sorted = [...frames].sort((a,b) => (a.x||0)-(b.x||0));
+  area.innerHTML = sorted.map((f,i) =>
+    `<div class="frame-item"><span class="frame-num">${featNum}.${featVer}.${i+1}</span><span class="frame-name">${f.name}</span><span class="frame-new">${featNum}.${featVer}.${i+1}</span></div>`
   ).join('');
 }
-function addScreen() {
-  const raw = document.getElementById('new-screen').value.trim();
-  const v = raw.toLowerCase().replace(/[^a-z0-9_]/g,'');
-  if (!v) { showToast('영문, 숫자, _ 만 사용 가능해요'); return; }
-  if (screenList.includes(v)) { showToast('이미 있어요'); return; }
-  screenList.push(v);
-  document.getElementById('new-screen').value='';
-  renderScreenList(); renderScreenSelect(); saveFeatureMap();
-}
-function rmScreen(i) { screenList.splice(i,1); renderScreenList(); renderScreenSelect(); saveFeatureMap(); }
 
-// ── 설정: 기능 이름 매핑 ──────────────────────────────────────────────────────
+function doRename() {
+  const featNum = document.getElementById('feat-num')?.value?.trim();
+  const featVer = document.getElementById('feat-ver')?.value?.trim();
+  if (!featNum || !featVer || !selectedFrames.length) { showToast('기능번호·버전·프레임을 확인해주세요'); return; }
+  const sorted = [...selectedFrames].sort((a,b)=>(a.x||0)-(b.x||0));
+  const renames = sorted.map((f,i) => ({ id:f.id, newName:`${featNum}.${featVer}.${i+1}` }));
+  toFigma({ type:'rename-frames', renames });
+  const result = document.getElementById('rename-result');
+  const renameList = document.getElementById('rename-list');
+  if (result) result.style.display = 'block';
+  if (renameList) renameList.innerHTML = renames.map(r => `<div class="frame-item"><span class="frame-name">${r.newName}</span></div>`).join('');
+}
+
+// ── 기능 이름 매핑 ────────────────────────────────────────────────────────────
 function renderFeatMap() {
-  document.getElementById('feat-map-list').innerHTML = Object.entries(featureMap).map(([k,v])=>
-    `<div class="screen-item"><span class="prev-badge" style="margin-right:4px">${k}</span><span style="flex:1;font-size:12px">${v}</span><button class="rm-btn" onclick="rmFeat('${k}')">×</button></div>`
+  const list = document.getElementById('feat-map-list'); if (!list) return;
+  list.innerHTML = Object.entries(featureMap).map(([k,v]) =>
+    `<div class="screen-item"><span class="screen-num">${k}</span><span class="screen-name">${v}</span><button onclick="delFeat('${k}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--text-4);font-size:12px">×</button></div>`
   ).join('');
 }
 function addFeat() {
-  const n=document.getElementById('fm-num').value.trim(), v=document.getElementById('fm-name').value.trim();
-  if (!n||!v) { showToast('번호와 이름을 입력해주세요'); return; }
-  featureMap[n]=v;
-  document.getElementById('fm-num').value=''; document.getElementById('fm-name').value='';
+  const num = document.getElementById('fm-num')?.value?.trim();
+  const name = document.getElementById('fm-name')?.value?.trim();
+  if (!num||!name) { showToast('번호와 이름을 입력해주세요'); return; }
+  featureMap[num] = name;
   renderFeatMap(); saveFeatureMap();
-  if (selectedFrames.length) renderPreview();
+  document.getElementById('fm-num').value=''; document.getElementById('fm-name').value='';
+  showBadge('feat-saved');
 }
-function rmFeat(k) { delete featureMap[k]; renderFeatMap(); saveFeatureMap(); }
+function delFeat(k) { delete featureMap[k]; renderFeatMap(); saveFeatureMap(); }
+function saveFeatureMap() { storageSave('featureMap', featureMap); toFigma({type:'save-feature-map', featureMap}); }
 
-// clientStorage 저장 (code.js 경유)
-async function saveFeatureMap() {
-  storageSave('featureMap', featureMap);
-  storageSave('screenList', screenList);
-  if (IS_FIGMA) toFigma({ type:'save-feature-map', featureMap, screenList });
-  // config.json 동기화
-  const ok = await pushConfigToGithub({ featureMap, screenList });
-  if (ok) showToast('✓ config.json 저장됨');
+// ── 화면 목록 ─────────────────────────────────────────────────────────────────
+function renderScreenList() {
+  const list = document.getElementById('screen-list'); if (!list) return;
+  list.innerHTML = screenList.map((s,i) =>
+    `<div class="screen-item"><span class="screen-name">${s}</span><button onclick="delScreen(${i})" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--text-4);font-size:12px">×</button></div>`
+  ).join('');
 }
-
-// ── Tolgee 설정 ───────────────────────────────────────────────────────────────
-function saveGithubSettings() {
-  // token만 저장, owner/repo/branch는 config.json에서 관리
-  const token = document.getElementById('gh-token').value.trim();
-  try { localStorage.setItem('skt_gh_token', token); } catch(e) {}
-  if (IS_FIGMA) {
-    toFigma({ type: 'save-storage', key: 'skt_gh_token', value: token });
-    if (document.getElementById('gh-owner').value) toFigma({ type: 'save-storage', key: 'skt_gh_owner', value: document.getElementById('gh-owner').value });
-    if (document.getElementById('gh-repo').value)  toFigma({ type: 'save-storage', key: 'skt_gh_repo',  value: document.getElementById('gh-repo').value });
-    if (document.getElementById('gh-branch').value) toFigma({ type: 'save-storage', key: 'skt_gh_branch', value: document.getElementById('gh-branch').value });
-  }
-  showBadge('gh-saved');
-  showToast('GitHub 토큰이 저장됐어요');
-  recheckOnboarding();
+function addScreen() {
+  const inp = document.getElementById('new-screen'); if (!inp) return;
+  const s = inp.value.trim();
+  if (!s) { showToast('화면 이름을 입력해주세요'); return; }
+  if (screenList.includes(s)) { showToast('이미 있어요'); return; }
+  screenList.push(s); inp.value='';
+  renderScreenList(); renderScreenSelect(); saveScreenList(); showBadge('screen-saved');
 }
+function delScreen(i) { screenList.splice(i,1); renderScreenList(); renderScreenSelect(); saveScreenList(); }
+function saveScreenList() { storageSave('screenList', screenList); toFigma({type:'save-screen-list', screenList}); }
 
-async function syncFromGithub() {
-  showToast('config.json 불러오는 중...');
-  const remote = await fetchRemoteConfig();
-  if (remote) {
-    if (remote.featureMap) featureMap = remote.featureMap;
-    if (remote.screenList) screenList = remote.screenList;
-    renderScreenSelect(); renderScreenList(); renderFeatMap();
-    showToast('✓ 동기화 완료');
-  } else {
-    showToast('✗ config.json 불러오기 실패');
-  }
+// ── 설정 탭 ───────────────────────────────────────────────────────────────────
+function renderSettingsBadges() {
+  try {
+    if (localStorage.getItem('skt_claude_key')) showBadge('claude-saved');
+    if (localStorage.getItem('skt_tolgee_apikey')) showBadge('tolgee-saved');
+    if (localStorage.getItem('skt_gh_token')) showBadge('gh-saved');
+  } catch(e) {}
 }
-
 function saveClaudeKey() {
-  const key = document.getElementById('claude-key').value.trim();
+  const key = document.getElementById('claude-key')?.value?.trim();
   try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
-  // 코드에서 직접 사용할 수 있도록 전역 업데이트
-  showBadge('claude-saved');
-  showToast('Claude API Key가 저장됐어요');
+  if (IS_FIGMA) toFigma({ type:'save-storage', key:'skt_claude_key', value:key });
+  showBadge('claude-saved'); showToast('Claude API Key 저장됐어요');
 }
-
-function saveClaudeKey() {
-  var key = document.getElementById('claude-key').value.trim();
-  try { localStorage.setItem('skt_claude_key', key); } catch(e) {}
-  if (IS_FIGMA) toFigma({ type: 'save-storage', key: 'skt_claude_key', value: key });
-  showBadge('claude-saved');
-  showToast('Claude API Key가 저장됐어요');
-}
-
 function saveTolgee() {
-  // url/projectId는 config.json에서 관리 — API Key만 저장
-  const apiKey = document.getElementById('cfg-key').value.trim();
-  tolgeeConfig.apiKey = apiKey;
-  _api = null; _cache = null; _cacheTime = 0;
-  // API Key는 localStorage에 저장 (Figma/브라우저 공통)
+  const apiKey = document.getElementById('cfg-key')?.value?.trim();
+  tolgeeConfig.apiKey = apiKey; _cache = null; _cacheTime = 0;
   try { localStorage.setItem('skt_tolgee_apikey', apiKey); } catch(e) {}
-  if (IS_FIGMA) {
-    toFigma({ type:'save-tolgee-config', config: tolgeeConfig });
-    toFigma({ type:'save-storage', key:'skt_tolgee_apikey', value: apiKey });
-  }
-  showBadge('tolgee-saved');
-  recheckOnboarding();
+  if (IS_FIGMA) { toFigma({type:'save-tolgee-config', config:tolgeeConfig}); toFigma({type:'save-storage', key:'skt_tolgee_apikey', value:apiKey}); }
+  showBadge('tolgee-saved'); recheckOnboarding();
 }
 async function testTolgee() {
-  saveTolgee();
-  const a=getApi(); if(!a){showToast('API 정보를 입력해주세요');return;}
-  try{
-    const d=await a.test();
-    showToast('✓ 연결 성공: ' + (d.name||'프로젝트'));
-  } catch(e) {
-    const msg = e.message||'';
-    if(msg.includes('DOCTYPE')||msg.includes('JSON')||msg.includes('Failed to fetch')){
-      showToast('✗ CORS 오류 — 서버에서 GitHub Pages 도메인을 허용해야 해요');
-    } else {
-      showToast('✗ ' + msg);
-    }
+  const a = getApi();
+  if (!a) { showToast('설정을 먼저 저장해주세요'); return; }
+  try {
+    const res = await fetch(`${a.baseUrl}/v2/projects/${a.projectId}`, {headers:{'X-API-Key':a.apiKey}});
+    if (res.ok) showToast('✓ Tolgee 연결 성공!');
+    else showToast('연결 실패: '+res.status);
+  } catch(e) { showToast('연결 오류: '+e.message); }
+}
+function getGithubConfig() {
+  try { return { token:localStorage.getItem('skt_gh_token')||'', owner:localStorage.getItem('skt_gh_owner')||'', repo:localStorage.getItem('skt_gh_repo')||'', branch:localStorage.getItem('skt_gh_branch')||'main' }; } catch(e) { return {}; }
+}
+function saveGithubSettings() {
+  const token = document.getElementById('gh-token')?.value?.trim();
+  const owner = document.getElementById('gh-owner')?.value||'';
+  const repo = document.getElementById('gh-repo')?.value||'';
+  const branch = document.getElementById('gh-branch')?.value||'main';
+  try { localStorage.setItem('skt_gh_token',token); localStorage.setItem('skt_gh_owner',owner); localStorage.setItem('skt_gh_repo',repo); localStorage.setItem('skt_gh_branch',branch); } catch(e) {}
+  if (IS_FIGMA) { toFigma({type:'save-storage',key:'skt_gh_token',value:token}); toFigma({type:'save-storage',key:'skt_gh_owner',value:owner}); toFigma({type:'save-storage',key:'skt_gh_repo',value:repo}); toFigma({type:'save-storage',key:'skt_gh_branch',value:branch}); }
+  showBadge('gh-saved'); showToast('GitHub 토큰이 저장됐어요'); recheckOnboarding();
+}
+async function syncFromGithub() {
+  const gh = getGithubConfig();
+  if (!gh.token||!gh.owner||!gh.repo) { showToast('GitHub 설정을 먼저 저장해주세요'); return; }
+  try {
+    const res = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/config.json`, { headers:{'Authorization':'token '+gh.token,'Accept':'application/vnd.github.v3+json'} });
+    if (!res.ok) throw new Error(res.status+'');
+    const data = await res.json();
+    const remote = JSON.parse(atob(data.content.replace(/\n/g,'')));
+    if (remote.tolgee) { tolgeeConfig = {...tolgeeConfig, ...remote.tolgee}; document.getElementById('cfg-url').value=tolgeeConfig.url||''; document.getElementById('cfg-project').value=tolgeeConfig.projectId||''; }
+    if (remote.featureMap) { featureMap=remote.featureMap; renderFeatMap(); }
+    if (remote.screenList) { screenList=remote.screenList; renderScreenList(); renderScreenSelect(); }
+    if (remote.keyRules) keyRules=remote.keyRules;
+    if (remote.github?.owner) { localStorage.setItem('skt_gh_owner',remote.github.owner); localStorage.setItem('skt_gh_repo',remote.github.repo); localStorage.setItem('skt_gh_branch',remote.github.branch||'main'); }
+    showToast('✓ GitHub 동기화 완료');
+  } catch(e) { showToast('동기화 실패: '+e.message); }
+}
+
+function uT() {
+  const r = parseInt(document.getElementById('tr-r')?.value||'85');
+  let s = parseInt(document.getElementById('tr-s')?.value||'50');
+  if (s >= r) { s=r-1; const el=document.getElementById('tr-s'); if(el) el.value=s; }
+  const tvR=document.getElementById('tv-r'), tvS=document.getElementById('tv-s');
+  if(tvR) tvR.textContent=r+'%'; if(tvS) tvS.textContent=s+'%';
+}
+
+// ── 초기화 ────────────────────────────────────────────────────────────────────
+async function initApp() {
+  let savedTheme = 'light';
+  try { savedTheme = localStorage.getItem('skt_theme')||'light'; } catch(e) {}
+  setTheme(savedTheme);
+  if (!IS_FIGMA) {
+    await syncFromGithub().catch(()=>{});
+    renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+    showOnboardingIfNeeded();
+    setTimeout(warmupCache, 1500);
+  } else {
+    renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+    document.querySelectorAll('.figma-only').forEach(el => el.style.display='flex');
+    setTimeout(warmupCache, 1500);
   }
 }
 
-// ── TolgeeAPI ─────────────────────────────────────────────────────────────────
-class TolgeeAPI{
-  constructor({baseUrl,projectId,apiKey}){this.baseUrl=baseUrl.replace(/\/$/,'');this.projectId=projectId;this.apiKey=apiKey;}
-  get hdr(){return{'Content-Type':'application/json','X-API-Key':this.apiKey};}
-
-  async _fetch(url, options={}) {
-    return fetch(url, {
-      credentials: 'omit',
-      ...options,
-      headers: { ...this.hdr, ...(options.headers||{}) },
-    });
-  }
-
-  async fetchAllKeys({lang=null,pageSize=500}={}){
-    lang = lang || (tolgeeConfig.langs && tolgeeConfig.langs[0]) || 'ko-KR';
-
-    // /v2/projects/:id/translations/:lang — 올바른 엔드포인트
-    const firstRes = await fetch(
-      `${this.baseUrl}/v2/projects/${this.projectId}/translations/${lang}?size=${pageSize}&page=0`,
-      {headers: this.hdr}
-    );
-    if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
-    const firstData = await firstRes.json();
-    const totalPages = firstData.page?.totalPages || 1;
-    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, 'keys:', firstData._embedded?.keys?.length, 'fields:', Object.keys(firstData).join(','));
-
-    // 나머지 페이지 병렬 fetch
-    const pagePromises = [];
-    for (let p = 1; p < totalPages; p++) {
-      pagePromises.push(
-        fetch(`${this.baseUrl}/v2/projects/${this.projectId}/translations/${lang}?size=${pageSize}&page=${p}`, {headers: this.hdr})
-          .then(r => r.json()).catch(() => ({}))
-      );
-    }
-    const restPages = await Promise.all(pagePromises);
-    const allPages = [firstData, ...restPages];
-
-    const all = [];
-    allPages.forEach(d => {
-      (d._embedded?.keys || []).forEach(item => {
-        const trans = item.translations?.[lang];
-        const val = trans?.text || '';
-        const state = trans?.state || '';
-        if (state === 'UNTRANSLATED') return;
-        all.push({
-          key: item.keyName,
-          keyId: item.keyId,
-          val,
-          figmaTags: (item.description||'').replace('Figma:','').split(',').map(s=>s.trim()).filter(Boolean),
-        });
-      });
-    });
-    console.log('[SKT] fetchAllKeys total parsed:', all.length);
-    return all;
-  }
+document.getElementById('str-input')?.addEventListener('keydown', e => { if (e.key==='Enter' && !e.isComposing) doSearch(); });
+initApp().then(() => { if (!IS_FIGMA) showOnboardingIfNeeded(); });
+</script>
+</body>
+</html>
