@@ -909,14 +909,31 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         const binary = atob(msg.base64);
         const bytes = new Uint8Array(binary.length);
         for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-        const blob = new Blob([bytes], {type:'image/png'});
         const pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+        let finalBlob;
+        if (pos && msg.frameWidth && msg.frameHeight) {
+          try {
+            const imgBitmap = await createImageBitmap(new Blob([bytes], {type:'image/png'}));
+            const canvas = new OffscreenCanvas(msg.frameWidth, msg.frameHeight);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imgBitmap, 0, 0, msg.frameWidth, msg.frameHeight);
+            ctx.strokeStyle = '#FF3B30';
+            ctx.lineWidth = Math.max(2, Math.round(msg.frameWidth / 200));
+            ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+            ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            finalBlob = await canvas.convertToBlob({type:'image/png'});
+          } catch(e) {
+            finalBlob = new Blob([bytes], {type:'image/png'});
+          }
+        } else {
+          finalBlob = new Blob([bytes], {type:'image/png'});
+        }
         const fd = new FormData();
-        fd.append('screenshot', blob, (frameName||'screenshot')+'.png');
-        if (pos) fd.append('positions', JSON.stringify([{x:pos.x,y:pos.y,width:pos.width,height:pos.height}]));
+        fd.append('screenshot', finalBlob, (frameName||'screenshot')+'.png');
         const res = await fetch(`${api.baseUrl}/v2/projects/${api.projectId}/keys/${keyId}/screenshots`,
           {method:'POST', credentials:'omit', headers:{'X-API-Key':api.apiKey}, body:fd});
-        console.log('[SKT] screenshot status:', res.status, 'key:', keyName);
+        console.log('[SKT] screenshot status:', res.status, 'key:', keyName, 'pos:', pos);
         if (!res.ok) throw new Error('스크린샷 실패: '+res.status);
         showToast('✓ 스크린샷 첨부');
       } catch(e) { console.warn('[SKT]', e.message); showToast('스크린샷 실패: '+e.message); }
@@ -956,14 +973,38 @@ async function uploadScreenshotWithKeyId(api, keyName, keyId, frameId, frameName
         const binary = atob(msg.base64);
         const bytes = new Uint8Array(binary.length);
         for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-        const blob = new Blob([bytes], {type:'image/png'});
+
         const pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+
+        // PNG에 직접 하이라이트 박스 그리기
+        let finalBlob;
+        if (pos && msg.frameWidth && msg.frameHeight) {
+          try {
+            const imgBitmap = await createImageBitmap(new Blob([bytes], {type:'image/png'}));
+            const canvas = new OffscreenCanvas(msg.frameWidth, msg.frameHeight);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imgBitmap, 0, 0, msg.frameWidth, msg.frameHeight);
+            // 박스 그리기
+            ctx.strokeStyle = '#FF3B30';
+            ctx.lineWidth = Math.max(2, Math.round(msg.frameWidth / 200));
+            ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
+            // 반투명 배경
+            ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
+            ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
+            finalBlob = await canvas.convertToBlob({type:'image/png'});
+          } catch(e) {
+            console.warn('[SKT] canvas highlight failed, using original:', e.message);
+            finalBlob = new Blob([bytes], {type:'image/png'});
+          }
+        } else {
+          finalBlob = new Blob([bytes], {type:'image/png'});
+        }
+
         const fd = new FormData();
-        fd.append('screenshot', blob, (frameName||'screenshot')+'.png');
-        if (pos) fd.append('positions', JSON.stringify([{x:pos.x,y:pos.y,width:pos.width,height:pos.height}]));
+        fd.append('screenshot', finalBlob, (frameName||'screenshot')+'.png');
         const res = await fetch(`${api.baseUrl}/v2/projects/${api.projectId}/keys/${keyId}/screenshots`,
           {method:'POST', credentials:'omit', headers:{'X-API-Key':api.apiKey}, body:fd});
-        console.log('[SKT] screenshot status:', res.status, 'key:', keyName);
+        console.log('[SKT] screenshot status:', res.status, 'key:', keyName, 'pos:', pos);
         if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error('스크린샷 실패: '+res.status+' '+JSON.stringify(e)); }
         showToast('✓ 스크린샷 첨부');
       } catch(e) { console.warn('[SKT]', e.message); showToast('스크린샷 실패: '+e.message); }
