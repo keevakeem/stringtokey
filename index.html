@@ -386,8 +386,8 @@ select{cursor:pointer}
     <input type="text" id="cfg-key" placeholder="tgpak_..." style="font-family:var(--mono);font-size:11px">
   </div>
   <!-- 숨김 필드 (JS에서 참조) -->
-  <input type="hidden" id="cfg-url">
-  <input type="hidden" id="cfg-project">
+  <input type="text" id="cfg-url" placeholder="https://your-tolgee-server.com" style="margin-bottom:6px;font-family:var(--mono);font-size:11px">
+  <input type="text" id="cfg-project" placeholder="Project ID (예: 3)" style="margin-bottom:6px;font-family:var(--mono);font-size:11px">
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn-p" style="flex:1" onclick="saveTolgee()">저장</button>
     <button class="btn-s" style="flex:1" onclick="testTolgee()">연결 테스트</button>
@@ -581,9 +581,10 @@ class TolgeeApi {
 }
 
 function getApi() {
-  const url = tolgeeConfig.url || localStorage.getItem('skt_tolgee_url') || '';
-  const pid = tolgeeConfig.projectId || '';
-  const key = tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || '';
+  const url = tolgeeConfig.url || localStorage.getItem('skt_tolgee_url') || document.getElementById('cfg-url')?.value || '';
+  const pid = tolgeeConfig.projectId || localStorage.getItem('skt_tolgee_project') || document.getElementById('cfg-project')?.value || '';
+  const key = tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || document.getElementById('cfg-key')?.value || '';
+  console.log('[SKT] getApi - url:', url, 'pid:', pid, 'key:', !!key);
   if (!url || !pid || !key) return null;
   return new TolgeeApi(url, pid, key);
 }
@@ -1466,8 +1467,13 @@ function saveTolgee() {
   showBadge('tolgee-saved'); recheckOnboarding();
 }
 async function testTolgee() {
-  const a = getApi();
-  if (!a) { showToast('설정을 먼저 저장해주세요'); return; }
+  // 저장 전에도 입력값으로 즉시 테스트
+  const url = (document.getElementById('cfg-url')?.value || tolgeeConfig.url || localStorage.getItem('skt_tolgee_url') || '').trim();
+  const pid = (document.getElementById('cfg-project')?.value || tolgeeConfig.projectId || localStorage.getItem('skt_tolgee_project') || '').trim();
+  const key = (document.getElementById('cfg-key')?.value || tolgeeConfig.apiKey || localStorage.getItem('skt_tolgee_apikey') || '').trim();
+  console.log('[SKT] testTolgee - url:', url, 'pid:', pid, 'key:', !!key);
+  if (!url || !pid || !key) { showToast('URL · ProjectID · API Key를 입력해주세요'); return; }
+  const a = new TolgeeApi(url, pid, key);
   try {
     const res = await fetch(`${a.baseUrl}/v2/projects/${a.projectId}`, {headers:{'X-API-Key':a.apiKey}});
     if (res.ok) showToast('✓ Tolgee 연결 성공!');
