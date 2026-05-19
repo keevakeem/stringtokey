@@ -607,6 +607,9 @@ function sim(a, b) {
   if (!a || !b) return 0;
   a = a.toLowerCase().trim(); b = b.toLowerCase().trim();
   if (a === b) return 100;
+  // 부분 포함 시 길이 비율만큼 가산 (짧은 검색어로 긴 문자열 찾기)
+  if (b.includes(a)) return Math.round(50 + (a.length / b.length) * 50);
+  if (a.includes(b)) return Math.round(50 + (b.length / a.length) * 50);
   const d = lev(a, b), max = Math.max(a.length, b.length);
   return max === 0 ? 100 : Math.round((1 - d/max)*100);
 }
