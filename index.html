@@ -676,7 +676,7 @@ function withDupeCheck(candidates, existingKeys) {
   return candidates.map(c => {
     const k = typeof c === 'object' ? c.key : c;
     const match = (existingKeys||[]).find(e => e.key === k);
-    return { key: k, exists: !!match, sim: 100 };
+    return { key: k, exists: !!match, existingKeyId: match?.keyId || null, sim: 100 };
   });
 }
 
@@ -844,7 +844,9 @@ function selN(el, inputVal) {
     currentTopFrameNames.forEach(n => { if (/^\d+\.\d+\.\d+$/.test(n) && !selTags.includes(n)) selTags.push(n); });
     selTags.sort();
   }
-  selExistingKeyId = null;
+  // 추천 키가 이미 존재하는 경우 existingKeyId 세팅
+  const matched = (_cache||[]).find(item => item.key === keyVal);
+  selExistingKeyId = matched?.keyId || null;
   showConfirm(keyVal, inputVal);
 }
 function showConfirm(key, val) {
@@ -1179,9 +1181,15 @@ async function renderResults(inputVal, results, thresh, allKeys) {
 function renderSuggestions(el, suggestions, inputVal) {
   el.innerHTML = suggestions.map((s, i) => {
     const key = typeof s === 'object' ? s.key : s;
-    return `<div class="card" id="cn-${i}" onclick="selN(this,'${inputVal.replace(/'/g,"\\'")}'); document.getElementById('nki').value='${key}'; selKey='${key}';" style="margin-bottom:6px">
-      <span style="font-family:var(--mono);font-size:11px;color:var(--text)">${key}</span>
-    </div>`;
+    const exists = typeof s === 'object' && s.exists;
+    const badge = exists
+      ? '<span class="badge bs" style="font-size:9px;flex-shrink:0">이미 존재</span>'
+      : '<span class="badge bn" style="font-size:9px;flex-shrink:0">신규</span>';
+    const escaped = inputVal.replace(/'/g, "\'");
+    return '<div class="card" id="cn-' + i + '" onclick="selN(this,\'' + escaped + '\'); document.getElementById(\'nki\').value=\'' + key + '\'; selKey=\'' + key + '\';" style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">'
+      + '<span style="font-family:var(--mono);font-size:11px;color:var(--text)">' + key + '</span>'
+      + badge
+      + '</div>';
   }).join('');
 }
 
@@ -1443,8 +1451,17 @@ function saveClaudeKey() {
 }
 function saveTolgee() {
   const apiKey = document.getElementById('cfg-key')?.value?.trim();
-  tolgeeConfig.apiKey = apiKey; _cache = null; _cacheTime = 0;
-  try { localStorage.setItem('skt_tolgee_apikey', apiKey); } catch(e) {}
+  const cfgUrl = document.getElementById('cfg-url')?.value?.trim();
+  const cfgPid = document.getElementById('cfg-project')?.value?.trim();
+  tolgeeConfig.apiKey = apiKey;
+  if (cfgUrl) tolgeeConfig.url = cfgUrl;
+  if (cfgPid) tolgeeConfig.projectId = cfgPid;
+  _cache = null; _cacheTime = 0;
+  try {
+    localStorage.setItem('skt_tolgee_apikey', apiKey);
+    if (cfgUrl) localStorage.setItem('skt_tolgee_url', cfgUrl);
+    if (cfgPid) localStorage.setItem('skt_tolgee_project', cfgPid);
+  } catch(e) {}
   if (IS_FIGMA) { toFigma({type:'save-tolgee-config', config:tolgeeConfig}); toFigma({type:'save-storage', key:'skt_tolgee_apikey', value:apiKey}); }
   showBadge('tolgee-saved'); recheckOnboarding();
 }
@@ -1500,6 +1517,21 @@ async function initApp() {
   try { savedTheme = localStorage.getItem('skt_theme')||'light'; } catch(e) {}
   setTheme(savedTheme);
   if (!IS_FIGMA) {
+    // localStorage에서 Tolgee 설정 먼저 복원 (syncFromGithub 실패해도 동작)
+    try {
+      const lsApiKey = localStorage.getItem('skt_tolgee_apikey') || '';
+      const lsUrl    = localStorage.getItem('skt_tolgee_url') || '';
+      const lsPid    = localStorage.getItem('skt_tolgee_project') || '';
+      if (lsApiKey) tolgeeConfig.apiKey = lsApiKey;
+      if (lsUrl)    tolgeeConfig.url    = lsUrl;
+      if (lsPid)    tolgeeConfig.projectId = lsPid;
+    } catch(e) {}
+    // cfg-url, cfg-project 숨김 필드에서도 읽기
+    const cfgUrl = document.getElementById('cfg-url')?.value;
+    const cfgPid = document.getElementById('cfg-project')?.value;
+    if (cfgUrl && !tolgeeConfig.url) tolgeeConfig.url = cfgUrl;
+    if (cfgPid && !tolgeeConfig.projectId) tolgeeConfig.projectId = cfgPid;
+
     await syncFromGithub().catch(()=>{});
     renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
     showOnboardingIfNeeded();
