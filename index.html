@@ -690,7 +690,19 @@ async function translateWithClaude(text, sourceLang, targetLangs) {
   if (!apiKey || !targetLangs.length) return {};
   const langNames = {'ko-KR':'Korean','en-US':'English','ja-JP':'Japanese','zh-CN':'Chinese (Simplified)'};
   const targetList = targetLangs.map(l => (langNames[l]||l) + ' (' + l + ')').join(', ');
-  const prompt = `Translate from ${langNames[sourceLang]||sourceLang} into ${targetList}. `
+
+  // config.json glossary 적용
+  const glossaryEntries = Object.entries(tolgeeConfig.glossary || {})
+    .filter(([src]) => text.includes(src))
+    .map(([src, trans]) => {
+      const pairs = targetLangs.map(l => trans[l] ? `${langNames[l]||l}: "${trans[l]}"` : null).filter(Boolean);
+      return pairs.length ? `"${src}" → ${pairs.join(', ')}` : null;
+    }).filter(Boolean);
+  const glossaryNote = glossaryEntries.length
+    ? ` Use these fixed terms: ${glossaryEntries.join('; ')}.`
+    : '';
+
+  const prompt = `Translate from ${langNames[sourceLang]||sourceLang} into ${targetList}.${glossaryNote} `
     + `Return ONLY JSON with language codes as keys. Text: "${text}". `
     + `Format: ${JSON.stringify(targetLangs.reduce((a,l)=>{a[l]='';return a},{}))}`;
   try {
@@ -1606,6 +1618,7 @@ async function syncFromGithub() {
     if (remote.featureMap) { featureMap = remote.featureMap; renderFeatMap(); }
     if (remote.screenList) { screenList = remote.screenList; renderScreenList(); renderScreenSelect(); }
     if (remote.keyRules) keyRules = remote.keyRules;
+    if (remote.glossary) tolgeeConfig.glossary = remote.glossary;
     if (remote.github) {
       if (remote.github.owner)  { localStorage.setItem('skt_gh_owner',  remote.github.owner);  const el=document.getElementById('gh-owner');  if(el) el.value=remote.github.owner; }
       if (remote.github.repo)   { localStorage.setItem('skt_gh_repo',   remote.github.repo);   const el=document.getElementById('gh-repo');   if(el) el.value=remote.github.repo; }
