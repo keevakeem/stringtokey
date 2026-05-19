@@ -523,7 +523,9 @@ class TolgeeApi {
     if (!firstRes.ok) throw new Error(`Tolgee ${firstRes.status}`);
     const firstData = await firstRes.json();
     const totalPages = firstData.page?.totalPages || 1;
-    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, 'keys:', firstData._embedded?.keys?.length);
+    console.log('[SKT] fetchAllKeys response keys:', Object.keys(firstData));
+    console.log('[SKT] fetchAllKeys - totalPages:', totalPages, '_embedded:', !!firstData._embedded, 'keys count:', firstData._embedded?.keys?.length);
+    console.log('[SKT] fetchAllKeys sample:', JSON.stringify(firstData).slice(0, 400));
     const pagePromises = [];
     for (let p = 1; p < totalPages; p++) {
       pagePromises.push(
