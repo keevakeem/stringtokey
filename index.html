@@ -954,22 +954,24 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         let finalBlob;
         if (pos && msg.frameWidth && msg.frameHeight) {
           try {
-            const blob0 = new Blob([bytes], {type:'image/png'});
-            const blobUrl = URL.createObjectURL(blob0);
+            // base64를 직접 Image src로 — createObjectURL 불필요
+            const b64 = 'data:image/png;base64,' + msg.base64;
             const img = await new Promise((res, rej) => {
-              const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = blobUrl;
+              const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = b64;
             });
             const canvas = document.createElement('canvas');
             canvas.width = msg.frameWidth; canvas.height = msg.frameHeight;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, msg.frameWidth, msg.frameHeight);
-            URL.revokeObjectURL(blobUrl);
             ctx.strokeStyle = '#FF3B30';
             ctx.lineWidth = Math.max(2, Math.round(msg.frameWidth / 200));
             ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
             ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-            finalBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            finalBlob = await new Promise((res, rej) => {
+              canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+            });
+            console.log('[SKT] highlight blob size:', finalBlob.size);
           } catch(e) {
             console.warn('[SKT] canvas highlight failed:', e.message);
             finalBlob = new Blob([bytes], {type:'image/png'});
@@ -1028,22 +1030,24 @@ async function uploadScreenshotWithKeyId(api, keyName, keyId, frameId, frameName
         let finalBlob;
         if (pos && msg.frameWidth && msg.frameHeight) {
           try {
-            const blob0 = new Blob([bytes], {type:'image/png'});
-            const blobUrl = URL.createObjectURL(blob0);
+            // base64를 직접 Image src로 — createObjectURL 불필요
+            const b64 = 'data:image/png;base64,' + msg.base64;
             const img = await new Promise((res, rej) => {
-              const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = blobUrl;
+              const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = b64;
             });
             const canvas = document.createElement('canvas');
             canvas.width = msg.frameWidth; canvas.height = msg.frameHeight;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, msg.frameWidth, msg.frameHeight);
-            URL.revokeObjectURL(blobUrl);
             ctx.strokeStyle = '#FF3B30';
             ctx.lineWidth = Math.max(2, Math.round(msg.frameWidth / 200));
             ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
             ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-            finalBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            finalBlob = await new Promise((res, rej) => {
+              canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+            });
+            console.log('[SKT] highlight blob size:', finalBlob.size);
           } catch(e) {
             console.warn('[SKT] canvas highlight failed:', e.message);
             finalBlob = new Blob([bytes], {type:'image/png'});
