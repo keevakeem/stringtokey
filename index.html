@@ -954,17 +954,24 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         let finalBlob;
         if (pos && msg.frameWidth && msg.frameHeight) {
           try {
-            const imgBitmap = await createImageBitmap(new Blob([bytes], {type:'image/png'}));
-            const canvas = new OffscreenCanvas(msg.frameWidth, msg.frameHeight);
+            const blob0 = new Blob([bytes], {type:'image/png'});
+            const blobUrl = URL.createObjectURL(blob0);
+            const img = await new Promise((res, rej) => {
+              const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = blobUrl;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = msg.frameWidth; canvas.height = msg.frameHeight;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(imgBitmap, 0, 0, msg.frameWidth, msg.frameHeight);
+            ctx.drawImage(img, 0, 0, msg.frameWidth, msg.frameHeight);
+            URL.revokeObjectURL(blobUrl);
             ctx.strokeStyle = '#FF3B30';
             ctx.lineWidth = Math.max(2, Math.round(msg.frameWidth / 200));
             ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
             ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-            finalBlob = await canvas.convertToBlob({type:'image/png'});
+            finalBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
           } catch(e) {
+            console.warn('[SKT] canvas highlight failed:', e.message);
             finalBlob = new Blob([bytes], {type:'image/png'});
           }
         } else {
@@ -1021,20 +1028,24 @@ async function uploadScreenshotWithKeyId(api, keyName, keyId, frameId, frameName
         let finalBlob;
         if (pos && msg.frameWidth && msg.frameHeight) {
           try {
-            const imgBitmap = await createImageBitmap(new Blob([bytes], {type:'image/png'}));
-            const canvas = new OffscreenCanvas(msg.frameWidth, msg.frameHeight);
+            const blob0 = new Blob([bytes], {type:'image/png'});
+            const blobUrl = URL.createObjectURL(blob0);
+            const img = await new Promise((res, rej) => {
+              const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = blobUrl;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = msg.frameWidth; canvas.height = msg.frameHeight;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(imgBitmap, 0, 0, msg.frameWidth, msg.frameHeight);
-            // 박스 그리기
+            ctx.drawImage(img, 0, 0, msg.frameWidth, msg.frameHeight);
+            URL.revokeObjectURL(blobUrl);
             ctx.strokeStyle = '#FF3B30';
             ctx.lineWidth = Math.max(2, Math.round(msg.frameWidth / 200));
             ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
-            // 반투명 배경
             ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-            finalBlob = await canvas.convertToBlob({type:'image/png'});
+            finalBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
           } catch(e) {
-            console.warn('[SKT] canvas highlight failed, using original:', e.message);
+            console.warn('[SKT] canvas highlight failed:', e.message);
             finalBlob = new Blob([bytes], {type:'image/png'});
           }
         } else {
