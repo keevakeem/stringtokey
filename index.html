@@ -207,7 +207,10 @@ select{cursor:pointer}
       <strong id="hint-text"></strong>
       <span id="hint-frame"></span>
     </div>
-  <div class="lbl">문자열</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div class="lbl" style="margin:0">문자열</div>
+    <select id="input-lang-sel" style="font-size:11px;font-family:var(--mono);padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text-2);cursor:pointer"></select>
+  </div>
   <div class="row"><input type="text" id="str-input" placeholder="문자열 입력 (예: 다음으로)"></div>
 
   <button class="btn-p" id="search-btn" onclick="doSearch()" style="margin-top:4px">
@@ -910,7 +913,7 @@ function shouldRenameLayer() {
 
 // ── 스크린샷 ──────────────────────────────────────────────────────────────────
 function handleScreenshotReady(msg) {
-  console.log('[SKT] screenshot-ready, base64 len:', msg.base64?.length);
+  console.log('[SKT] screenshot-ready, base64 len:', msg.base64?.length, 'targetPos:', msg.targetPosition, 'callbacks:', Object.keys(window._screenshotCallbacks||{}).length);
   window._screenshotCallbacks = window._screenshotCallbacks || {};
   const keys = Object.keys(window._screenshotCallbacks).sort();
   if (keys.length > 0) {
@@ -919,6 +922,8 @@ function handleScreenshotReady(msg) {
     if (cb) cb(msg);
   } else if (window._screenshotCallback) {
     window._screenshotCallback(msg); window._screenshotCallback = null;
+  } else {
+    console.warn('[SKT] screenshot-ready 수신했지만 콜백 없음');
   }
 }
 
@@ -1138,7 +1143,7 @@ function handleFigmaMsg(msg) {
         document.getElementById('cfg-project').value = tolgeeConfig.projectId || '';
       }
       applySelection(msg);
-      renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+      renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect(); renderInputLangSelect();
       setTimeout(warmupCache, 1500);
       break;
     case 'selection-changed':
@@ -1291,8 +1296,10 @@ async function regKey() {
   if (!a) { showToast('⚠️ 설정 탭에서 Tolgee를 연결해주세요'); return; }
   try {
     const langs = tolgeeConfig.langs?.length ? tolgeeConfig.langs : ['ko-KR'];
-    const baseLang = langs[0];
-    const targetLangs = langs.slice(1);
+    // 입력 언어 선택 드롭다운에서 기준 언어 결정
+    const selectedInputLang = document.getElementById('input-lang-sel')?.value || langs[0];
+    const baseLang = selectedInputLang;
+    const targetLangs = langs.filter(l => l !== baseLang);
     const translations = { [baseLang]: valToRegister };
     let claudeKey = ''; try { claudeKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
     if (claudeKey && targetLangs.length) {
@@ -1314,7 +1321,7 @@ async function regKey() {
     if (shouldRenameLayer() && currentTextNodeId) toFigma({ type:'rename-layer', nodeId:currentTextNodeId, keyName:keyToRegister });
     const screenshotChk = document.getElementById('screenshot-chk');
     if (IS_FIGMA && screenshotChk?.checked) {
-      console.log('[SKT] screenshot - nodeId:', capturedNodeId, 'frames:', capturedFrames.length);
+      console.log('[SKT] screenshot 시작 - nodeId:', capturedNodeId, 'frames:', capturedFrames.length, 'keyId:', newKeyId);
       if (capturedFrames.length) await uploadScreenshotsForAllFramesWithId(a, keyToRegister, newKeyId, capturedFrames, capturedNodeId);
     }
     toFigma({ type:'notify', message:'키 등록: ' + keyToRegister });
@@ -1418,7 +1425,9 @@ async function registerBulkItem(idx) {
   try {
     if (a) {
       const langs = tolgeeConfig.langs?.length ? tolgeeConfig.langs : ['ko-KR'];
-      const baseLang = langs[0], targetLangs = langs.slice(1);
+      const selectedInputLang = document.getElementById('input-lang-sel')?.value || langs[0];
+      const baseLang = selectedInputLang;
+      const targetLangs = langs.filter(l => l !== baseLang);
       const bTranslations = { [baseLang]: textItem.characters };
       let claudeKey = ''; try { claudeKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
       if (claudeKey && targetLangs.length) {
@@ -1460,6 +1469,13 @@ function renderReplaceLangSelect() {
   const sel = document.getElementById('replace-lang-sel'); if (!sel) return;
   const langs = tolgeeConfig.langs || ['ko-KR','en-US','ja-JP'];
   sel.innerHTML = langs.map(l => `<option value="${l}">${l}</option>`).join('');
+}
+
+function renderInputLangSelect() {
+  const sel = document.getElementById('input-lang-sel'); if (!sel) return;
+  const langs = tolgeeConfig.langs || ['ko-KR','en-US','ja-JP'];
+  const langNames = {'ko-KR':'한국어','en-US':'English','ja-JP':'日本語','zh-CN':'中文'};
+  sel.innerHTML = langs.map(l => `<option value="${l}">${langNames[l]||l}</option>`).join('');
 }
 
 async function doReplace() {
@@ -1705,11 +1721,11 @@ async function initApp() {
     } catch(e) {}
     // config.json 직접 fetch (GitHub Pages URL 기준, Token 불필요)
     await syncFromGithub().catch(e => console.warn('초기 config 로드 실패:', e.message));
-    renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+    renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect(); renderInputLangSelect();
     showOnboardingIfNeeded();
     setTimeout(warmupCache, 1500);
   } else {
-    renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect();
+    renderScreenSelect(); renderScreenList(); renderFeatMap(); renderReplaceLangSelect(); renderInputLangSelect();
     document.querySelectorAll('.figma-only').forEach(el => el.style.display='flex');
     // 탭인 figma-only는 flex:1 유지되도록
     document.querySelectorAll('.tab.figma-only').forEach(el => { el.style.display='block'; });
