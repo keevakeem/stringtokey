@@ -950,7 +950,10 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
         const binary = atob(msg.base64);
         const bytes = new Uint8Array(binary.length);
         for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-        const pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+        // scale 반영한 position 좌표
+        const scale = msg.scale || 1;
+        let pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+        if (pos && scale !== 1) pos = {x:pos.x*scale, y:pos.y*scale, width:pos.width*scale, height:pos.height*scale};
         let finalBlob;
         if (pos && msg.frameWidth && msg.frameHeight) {
           try {
@@ -969,7 +972,7 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
             ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
             finalBlob = await new Promise((res, rej) => {
-              canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+              canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/jpeg', 0.75);
             });
             console.log('[SKT] highlight blob size:', finalBlob.size);
           } catch(e) {
@@ -980,7 +983,7 @@ async function uploadScreenshotForKey(api, keyName, overrideFrameId, overrideFra
           finalBlob = new Blob([bytes], {type:'image/png'});
         }
         const fd = new FormData();
-        fd.append('screenshot', finalBlob, (frameName||'screenshot')+'.png');
+        fd.append('screenshot', finalBlob, (frameName||'screenshot')+'.jpg');
         const res = await fetch(`${api.baseUrl}/v2/projects/${api.projectId}/keys/${keyId}/screenshots`,
           {method:'POST', credentials:'omit', headers:{'X-API-Key':api.apiKey}, body:fd});
         console.log('[SKT] screenshot status:', res.status, 'key:', keyName, 'pos:', pos);
@@ -1024,7 +1027,10 @@ async function uploadScreenshotWithKeyId(api, keyName, keyId, frameId, frameName
         const bytes = new Uint8Array(binary.length);
         for (let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
 
-        const pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+        // scale 반영한 position 좌표
+        const scale = msg.scale || 1;
+        let pos = msg.targetPosition || (msg.keyPositions||[]).find(p => p.key===keyName);
+        if (pos && scale !== 1) pos = {x:pos.x*scale, y:pos.y*scale, width:pos.width*scale, height:pos.height*scale};
 
         // PNG에 직접 하이라이트 박스 그리기
         let finalBlob;
@@ -1045,7 +1051,7 @@ async function uploadScreenshotWithKeyId(api, keyName, keyId, frameId, frameName
             ctx.fillStyle = 'rgba(255, 59, 48, 0.12)';
             ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
             finalBlob = await new Promise((res, rej) => {
-              canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+              canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/jpeg', 0.75);
             });
             console.log('[SKT] highlight blob size:', finalBlob.size);
           } catch(e) {
@@ -1057,7 +1063,7 @@ async function uploadScreenshotWithKeyId(api, keyName, keyId, frameId, frameName
         }
 
         const fd = new FormData();
-        fd.append('screenshot', finalBlob, (frameName||'screenshot')+'.png');
+        fd.append('screenshot', finalBlob, (frameName||'screenshot')+'.jpg');
         const res = await fetch(`${api.baseUrl}/v2/projects/${api.projectId}/keys/${keyId}/screenshots`,
           {method:'POST', credentials:'omit', headers:{'X-API-Key':api.apiKey}, body:fd});
         console.log('[SKT] screenshot status:', res.status, 'key:', keyName, 'pos:', pos);
@@ -1337,7 +1343,14 @@ async function regKey() {
     const screenshotChk = document.getElementById('screenshot-chk');
     if (IS_FIGMA && screenshotChk?.checked) {
       console.log('[SKT] screenshot 시작 - nodeId:', capturedNodeId, 'frames:', capturedFrames.length, 'keyId:', newKeyId);
-      if (capturedFrames.length) await uploadScreenshotsForAllFramesWithId(a, keyToRegister, newKeyId, capturedFrames, capturedNodeId);
+      // keyId가 없으면 캐시에서 다시 찾기
+      let ssKeyId = newKeyId;
+      if (!ssKeyId && _cache) {
+        const cached = _cache.find(item => item.key === keyToRegister);
+        ssKeyId = cached?.keyId || null;
+        console.log('[SKT] keyId from cache:', ssKeyId);
+      }
+      if (capturedFrames.length) await uploadScreenshotsForAllFramesWithId(a, keyToRegister, ssKeyId, capturedFrames, capturedNodeId);
     }
     toFigma({ type:'notify', message:'키 등록: ' + keyToRegister });
   } catch(e) { showToast('오류: ' + e.message); }
