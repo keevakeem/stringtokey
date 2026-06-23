@@ -484,7 +484,7 @@ let featureMap = {}, screenList = [], tolgeeConfig = {}, keyRules = {
 };
 let selectedFrames = [], layerContext = null, currentTopFrameNames = [], currentTopFrameId = null, currentTextNodeId = null;
 let selKey = null, selVal = null, selTags = [], selExistingKeyId = null;
-let bulkMode = false, bulkTexts = [], cardTags = {};
+let bulkMode = false, bulkTexts = [], bulkItems = [], cardTags = {};
 let _cache = null, _cacheTime = 0, _cacheLang = null;
 const CACHE_TTL = 5 * 60 * 1000;
 const MOCK_DB = [
@@ -1435,7 +1435,7 @@ async function renderBulkList() {
     }
     if (!isAlreadyRegistered) usedKeys[suggestedKey] = true;
     layerContext = null;
-    items.push({ text:t.characters, key:suggestedKey, idx:i, alreadyRegistered:isAlreadyRegistered });
+    items.push({ text:t.characters, key:suggestedKey, idx:i, alreadyRegistered:isAlreadyRegistered, textItemRef:t });
     done++;
 
     // 진행도 업데이트 (완료)
@@ -1447,6 +1447,7 @@ async function renderBulkList() {
   if (progressLabel) progressLabel.textContent = '추천 완료';
   if (progressBar) progressBar.style.width = '100%';
   setTimeout(() => { if (progressEl) progressEl.style.display = 'none'; }, 1500);
+  bulkItems = items; // 전역 저장 — registerBulkItem에서 참조
   list.innerHTML = '';
   items.forEach(item => {
     if (!item) return;
@@ -1476,7 +1477,10 @@ async function registerBulkItem(idx) {
   const btnEl = itemEl?.querySelector('.reg-btn');
   if (!keyEl?.value?.trim()) { showToast('키를 입력해주세요'); return; }
   const keyName = keyEl.value.trim();
-  const textItem = bulkTexts[idx];
+  // bulkItems에서 해당 항목 찾기 (filteredBulkTexts 인덱스 문제 방지)
+  const bulkItem = bulkItems.find(item => item && item.idx === idx);
+  if (!bulkItem) { showToast('항목을 찾을 수 없어요'); return; }
+  const textItem = bulkItem.textItemRef;
   if (btnEl) { btnEl.disabled=true; btnEl.textContent='...'; }
   const a = getApi();
   try {
