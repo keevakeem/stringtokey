@@ -1369,18 +1369,18 @@ async function renderBulkList() {
   let existingKeys = [];
   const a = getApi();
   if (a) try { existingKeys = (await getCached()) || []; } catch(e) {}
-  // 이미 등록된 키 필터링 — 레이어 이름이 Tolgee 키와 일치하면 제외
-  const registeredKeyNames = new Set((existingKeys||[]).map(k => k.key));
+  // 이미 등록된 문자열 필터링 — characters가 Tolgee 번역값과 일치하면 제외
+  const registeredVals = new Set((existingKeys||[]).map(k => k.val?.trim()).filter(Boolean));
   const filteredBulkTexts = bulkTexts.filter(t => {
     if (!t) return false;
-    if (t.name && registeredKeyNames.has(t.name)) {
-      console.log('[SKT] 이미 등록된 키 제외:', t.name);
+    if (t.characters && registeredVals.has(t.characters.trim())) {
+      console.log('[SKT] 이미 등록된 문자열 제외:', t.characters);
       return false;
     }
     return true;
   });
   const skippedCount = bulkTexts.filter(Boolean).length - filteredBulkTexts.length;
-  if (skippedCount > 0) showToast(skippedCount + '개는 이미 등록된 키라 제외했어요');
+  if (skippedCount > 0) showToast(skippedCount + '개는 이미 등록된 문자열이라 제외했어요');
 
   const items = [];
   const usedKeys = {};
@@ -1407,19 +1407,28 @@ async function renderBulkList() {
     if (progressCount) progressCount.textContent = `${done} / ${total}`;
     if (progressBar) progressBar.style.width = `${Math.round(done/total*100)}%`;
 
-    const candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
+    // 문자열 값으로 이미 등록된 키 찾기 (우선)
+    const existingMatch = (existingKeys||[]).find(k => k.val && k.val.trim() === t.characters.trim());
     let suggestedKey = null;
-    for (const cand of candidates) {
-      const k = typeof cand === 'object' ? cand.key : cand;
-      if (k && !usedKeys[k]) { suggestedKey = k; break; }
+    let isAlreadyRegistered = false;
+
+    if (existingMatch) {
+      suggestedKey = existingMatch.key;
+      isAlreadyRegistered = true;
+    } else {
+      const candidates = await recommendKeysWithClaude(scr, t.characters, existingKeys);
+      for (const cand of candidates) {
+        const k = typeof cand === 'object' ? cand.key : cand;
+        if (k && !usedKeys[k]) { suggestedKey = k; break; }
+      }
+      if (!suggestedKey) {
+        const base = candidates[0] ? (typeof candidates[0]==='object'?candidates[0].key:candidates[0]) : genKey(scr, t.characters, localContext);
+        suggestedKey = base + '_' + (i+1);
+      }
     }
-    if (!suggestedKey) {
-      const base = candidates[0] ? (typeof candidates[0]==='object'?candidates[0].key:candidates[0]) : genKey(scr, t.characters, localContext);
-      suggestedKey = base + '_' + (i+1);
-    }
-    usedKeys[suggestedKey] = true;
+    if (!isAlreadyRegistered) usedKeys[suggestedKey] = true;
     layerContext = null;
-    items.push({ text:t.characters, key:suggestedKey, idx:i });
+    items.push({ text:t.characters, key:suggestedKey, idx:i, alreadyRegistered:isAlreadyRegistered });
     done++;
 
     // 진행도 업데이트 (완료)
