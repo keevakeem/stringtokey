@@ -573,7 +573,13 @@ class TolgeeApi {
     const body = { name: keyName, translations, description };
     const res = await this._fetch(`${this.baseUrl}/v2/projects/${this.projectId}/keys`,
       { method:'POST', body: JSON.stringify(body) });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `${res.status}`); }
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      console.error('[SKT] registerKey failed:', res.status, JSON.stringify(e));
+      if (res.status === 403) throw new Error('권한 없음 (403) — Tolgee API Key에 keys.edit 권한이 있는지 확인해주세요');
+      if (res.status === 400) throw new Error('이미 존재하는 키예요. 유사 문자열 검색에서 재사용을 선택해주세요');
+      throw new Error(e.message || `${res.status}`);
+    }
     return await res.json();
   }
 }
@@ -711,10 +717,21 @@ async function translateWithClaude(text, sourceLang, targetLangs) {
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:200, messages:[{role:'user',content:prompt}] })
     });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn('[SKT] Claude 번역 실패:', res.status, errText.slice(0,100));
+      if (res.status === 401) throw new Error('Claude API Key가 올바르지 않아요. 설정 탭에서 확인해주세요');
+      if (res.status === 429) throw new Error('Claude API 사용 한도 초과. 잠시 후 다시 시도해주세요');
+      throw new Error('Claude API 오류: ' + res.status);
+    }
     const data = await res.json();
     const text2 = data.content?.[0]?.text || '';
     return JSON.parse(text2.replace(/```json|```/g,'').trim());
-  } catch(e) { return {}; }
+  } catch(e) {
+    console.warn('[SKT] Claude 번역 실패:', e.message);
+    showToast('번역 실패: ' + e.message);
+    return {};
+  }
 }
 
 async function recommendKeysWithClaude(screen, val, existingKeys) {
@@ -737,11 +754,18 @@ async function recommendKeysWithClaude(screen, val, existingKeys) {
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:100, messages:[{role:'user',content:prompt}] })
     });
+    if (!res.ok) throw new Error(res.status + '');
     const data = await res.json();
     const txt = data.content?.[0]?.text || '';
     const parsed = JSON.parse(txt.replace(/```json|```/g,'').trim());
     if (Array.isArray(parsed) && parsed.length) return withDupeCheck(parsed, existingKeys);
-  } catch(e) { console.warn('[SKT] Claude 추천 실패:', e.message); }
+  } catch(e) {
+    if (e.message && e.message.includes('401')) {
+      console.warn('[SKT] Claude API Key 인증 실패 — 규칙 기반으로 fallback');
+    } else {
+      console.warn('[SKT] Claude 추천 실패:', e.message);
+    }
+  }
   return withDupeCheck(ruleCandidates, existingKeys);
 }
 
@@ -1273,8 +1297,13 @@ async function regKey() {
     let claudeKey = ''; try { claudeKey = localStorage.getItem('skt_claude_key')||''; } catch(e) {}
     if (claudeKey && targetLangs.length) {
       showToast('번역 중...');
-      const translated = await translateWithClaude(valToRegister, baseLang, targetLangs);
-      targetLangs.forEach(l => translations[l] = translated[l] || '');
+      try {
+        const translated = await translateWithClaude(valToRegister, baseLang, targetLangs);
+        targetLangs.forEach(l => translations[l] = translated[l] || '');
+      } catch(e) {
+        showToast('번역 실패 — 기본 언어만 등록해요');
+        targetLangs.forEach(l => translations[l] = '');
+      }
     } else targetLangs.forEach(l => translations[l] = '');
     const regResult = await a.registerKey({ keyName:keyToRegister, val:valToRegister, translations, figmaTags:tagsToRegister, existingKeyId:existingId });
     // 응답에서 keyId 직접 추출 (캐시 갱신 전에도 사용 가능)
