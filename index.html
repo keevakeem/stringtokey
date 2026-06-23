@@ -1369,9 +1369,22 @@ async function renderBulkList() {
   let existingKeys = [];
   const a = getApi();
   if (a) try { existingKeys = (await getCached()) || []; } catch(e) {}
+  // 이미 등록된 키 필터링 — 레이어 이름이 Tolgee 키와 일치하면 제외
+  const registeredKeyNames = new Set((existingKeys||[]).map(k => k.key));
+  const filteredBulkTexts = bulkTexts.filter(t => {
+    if (!t) return false;
+    if (t.name && registeredKeyNames.has(t.name)) {
+      console.log('[SKT] 이미 등록된 키 제외:', t.name);
+      return false;
+    }
+    return true;
+  });
+  const skippedCount = bulkTexts.filter(Boolean).length - filteredBulkTexts.length;
+  if (skippedCount > 0) showToast(skippedCount + '개는 이미 등록된 키라 제외했어요');
+
   const items = [];
   const usedKeys = {};
-  const total = bulkTexts.filter(Boolean).length;
+  const total = filteredBulkTexts.filter(Boolean).length;
   let done = 0;
 
   // 진행도 표시 시작
@@ -1383,8 +1396,8 @@ async function renderBulkList() {
   if (progressCount) progressCount.textContent = `0 / ${total}`;
   if (progressBar) progressBar.style.width = '0%';
 
-  for (let i = 0; i < bulkTexts.length; i++) {
-    const t = bulkTexts[i];
+  for (let i = 0; i < filteredBulkTexts.length; i++) {
+    const t = filteredBulkTexts[i];
     if (!t) { items.push(null); continue; }
     const localContext = t.context || null;
     layerContext = localContext;
