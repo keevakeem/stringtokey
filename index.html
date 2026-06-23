@@ -209,7 +209,7 @@ select{cursor:pointer}
     </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div class="lbl" style="margin:0">문자열</div>
-    <select id="input-lang-sel" style="font-size:11px;font-family:var(--mono);padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text-2);cursor:pointer"></select>
+    <select id="input-lang-sel" style="font-size:12px;font-family:var(--sans);padding:4px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;height:32px;font-weight:500"></select>
   </div>
   <div class="row"><input type="text" id="str-input" placeholder="문자열 입력 (예: 다음으로)"></div>
 
@@ -485,7 +485,7 @@ let featureMap = {}, screenList = [], tolgeeConfig = {}, keyRules = {
 let selectedFrames = [], layerContext = null, currentTopFrameNames = [], currentTopFrameId = null, currentTextNodeId = null;
 let selKey = null, selVal = null, selTags = [], selExistingKeyId = null;
 let bulkMode = false, bulkTexts = [], cardTags = {};
-let _cache = null, _cacheTime = 0;
+let _cache = null, _cacheTime = 0, _cacheLang = null;
 const CACHE_TTL = 5 * 60 * 1000;
 const MOCK_DB = [
   {key:'common.btn.confirm', val:'확인', keyId:1}, {key:'common.btn.cancel', val:'취소', keyId:2},
@@ -598,15 +598,22 @@ function getApi() {
   return new TolgeeApi(url, pid, key);
 }
 
+function getInputLang() {
+  const sel = document.getElementById('input-lang-sel');
+  return (sel && sel.value) || (tolgeeConfig.langs && tolgeeConfig.langs[0]) || 'ko-KR';
+}
+
 async function getCached() {
   const a = getApi(); if (!a) return null;
-  if (_cache && Date.now() - _cacheTime < CACHE_TTL) return _cache;
-  _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); return _cache;
+  const lang = getInputLang();
+  if (_cache && _cacheLang === lang && Date.now() - _cacheTime < CACHE_TTL) return _cache;
+  _cache = await a.fetchAllKeys({ lang }); _cacheTime = Date.now(); _cacheLang = lang; return _cache;
 }
 async function warmupCache() {
   const a = getApi(); if (!a) return;
-  if (_cache && Date.now() - _cacheTime < CACHE_TTL) return;
-  try { _cache = await a.fetchAllKeys(); _cacheTime = Date.now(); } catch(e) {}
+  const lang = getInputLang();
+  if (_cache && _cacheLang === lang && Date.now() - _cacheTime < CACHE_TTL) return;
+  try { _cache = await a.fetchAllKeys({ lang }); _cacheTime = Date.now(); _cacheLang = lang; } catch(e) {}
 }
 
 // ── 유사도 ────────────────────────────────────────────────────────────────────
@@ -1524,8 +1531,10 @@ function renderReplaceLangSelect() {
 function renderInputLangSelect() {
   const sel = document.getElementById('input-lang-sel'); if (!sel) return;
   const langs = tolgeeConfig.langs || ['ko-KR','en-US','ja-JP'];
-  const langNames = {'ko-KR':'한국어','en-US':'English','ja-JP':'日本語','zh-CN':'中文'};
+  const langNames = {'ko-KR':'🇰🇷 한국어','en-US':'🇺🇸 English','ja-JP':'🇯🇵 日本語','zh-CN':'🇨🇳 中文'};
+  const prev = sel.value;
   sel.innerHTML = langs.map(l => `<option value="${l}">${langNames[l]||l}</option>`).join('');
+  if (prev && langs.includes(prev)) sel.value = prev;
 }
 
 async function doReplace() {
@@ -1785,6 +1794,11 @@ async function initApp() {
 
 document.getElementById('str-input')?.addEventListener('keydown', e => { if (e.key==='Enter' && !e.isComposing) doSearch(); });
 document.getElementById('nki')?.addEventListener('input', e => { selKey = e.target.value; });
+document.getElementById('input-lang-sel')?.addEventListener('change', () => {
+  // 언어 변경 시 캐시 무효화 → 다음 검색 시 새 언어로 fetch
+  _cache = null; _cacheTime = 0; _cacheLang = null;
+  showToast('언어 변경됨 — 다음 검색 시 반영돼요');
+});
 initApp().then(() => { if (!IS_FIGMA) showOnboardingIfNeeded(); });
 </script>
 </body>
